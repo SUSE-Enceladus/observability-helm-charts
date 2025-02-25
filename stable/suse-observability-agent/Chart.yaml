@@ -20,7 +20,6 @@ maintainers:
 - name: SUSE
   email: suse-observability-ops@suse.com
 name: suse-observability-agent
-<<<<<<< HEAD
 dependencies:
 - name: http-header-injector
   alias: httpHeaderInjectorWebhook
@@ -31,5 +30,3 @@ dependencies:
   repository: file://../../local/kubernetes-rbac-agent/
   version: "*"
   condition: kubernetes-rbac-agent.enabled
-=======
->>>>>>> 447318da (Remove optional dependency)
