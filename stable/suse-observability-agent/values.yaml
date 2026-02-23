@@ -164,7 +164,6 @@ nodeAgent:
       # nodeAgent.containers.agent.logLevel -- Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off
       ## If not set, fall back to the value of agent.logLevel.
       logLevel:
-
       resources:
         limits:
           # nodeAgent.containers.agent.resources.limits.cpu -- CPU resource limits.
@@ -218,7 +217,6 @@ nodeAgent:
       # nodeAgent.containers.processAgent.logLevel -- Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off
       ## If not set, fall back to the value of agent.logLevel.
       logLevel:
-
       # nodeAgent.containers.processAgent.procVolumeReadOnly -- Configure whether /host/proc is read only for the process agent container
       procVolumeReadOnly: true
 
@@ -691,7 +689,7 @@ httpHeaderInjectorWebhook:
       # certificatePrehook.image.repository - Repository for the docker image.
       repository: stackstate/container-tools
       # certificatePrehook.image.tag
-      tag: "1.8.2-bci-517"
+      tag: 1.8.3-610
 
 ########################
 # Rbac Agent variables #
@@ -701,11 +699,11 @@ kubernetes-rbac-agent:
   # kubernetes-rbac-agent.enabled. Enables/disables the rbac agent.
   enabled: false
   url:
-    fromConfigMap: '{{ include "stackstate-k8s-agent.url.configmap.internal.name"
-      . }}'
+    fromConfigMap: '{{ include "stackstate-k8s-agent.url.configmap.internal.name" . }}'
+
   clusterName:
-    fromConfigMap: '{{ include "stackstate-k8s-agent.clusterName.configmap.internal.name"
-      . }}'
+    fromConfigMap: '{{ include "stackstate-k8s-agent.clusterName.configmap.internal.name" . }}'
+
   roleType: 'scope'
   containers:
     rbacAgent:
@@ -717,7 +715,7 @@ kubernetes-rbac-agent:
         # kubernetes-rbac-agent.containers.rbacAgent.image.pullPolicy -- Policy when pulling an image
         # pullPolicy:
         # kubernetes-rbac-agent.containers.rbacAgent.image.tag -- The tag for the docker image
-        tag: 042257c3-575
+        tag: 13b1a255-590
       resources:
         requests:
           # kubernetes-rbac-agent.containers.rbacAgent.resources.requests.memory -- Memory resource requests.
