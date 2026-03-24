@@ -156,7 +156,7 @@ nodeAgent:
         # nodeAgent.containers.agent.image.repository -- Base container image repository.
         repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-agent
         # nodeAgent.containers.agent.image.tag -- Default container image tag.
-        tag: "17f32f66"
+        tag: "c93df31a"
         # nodeAgent.containers.agent.image.pullPolicy -- Default container image pull policy.
         pullPolicy: IfNotPresent
       # nodeAgent.containers.agent.env -- Additional environment variables for the agent container
@@ -442,7 +442,7 @@ clusterAgent:
     # clusterAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-cluster-agent
     # clusterAgent.image.tag -- Default container image tag.
-    tag: "17f32f66"
+    tag: "c93df31a"
     # clusterAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
@@ -585,7 +585,7 @@ checksAgent:
     # checksAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-agent
     # checksAgent.image.tag -- Default container image tag.
-    tag: "17f32f66"
+    tag: "c93df31a"
     # checksAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
