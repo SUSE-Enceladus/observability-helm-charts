@@ -532,7 +532,7 @@ logsAgent:
     # logsAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/promtail
     # logsAgent.image.tag -- Default container image tag.
-    tag: 2.9.15-b617a45b-105
+    tag: 3.6.10-f51a4334-release-134
     # logsAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
