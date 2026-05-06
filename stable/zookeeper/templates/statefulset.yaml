@@ -1,6 +1,6 @@
 {{- $replicaCount := include "common.sizing.zookeeper.effectiveReplicaCount" . | int -}}
 {{- $sizingPersistenceSize := include "common.sizing.zookeeper.persistence.size" . | trim -}}
-{{- $persistenceSize := default .Values.persistence.size $sizingPersistenceSize }}
+{{- $persistenceSize := default $sizingPersistenceSize .Values.persistence.size }}
 apiVersion: {{ include "common.capabilities.statefulset.apiVersion" . }}
 kind: StatefulSet
 metadata:
@@ -187,12 +187,9 @@ spec:
           {{- else if .Values.args }}
           args: {{- include "common.tplvalues.render" (dict "value" .Values.args "context" $) | nindent 12 }}
           {{- end }}
-          {{- $profileResources := include "common.sizing.zookeeper.resources" . | trim -}}
-          {{- $evaluatedResources := .Values.resources }}
-          {{- if $profileResources }}
-          {{- $profileResourcesDict := fromYaml $profileResources }}
-          {{- $evaluatedResources = merge $profileResourcesDict .Values.resources }}
-          {{- end }}
+          {{- $sizingResources := include "common.sizing.zookeeper.resources" . | trim -}}
+          {{- $sizingResourcesDict := fromYaml $sizingResources }}
+          {{- $evaluatedResources := merge (dict) .Values.resources $sizingResourcesDict }}
           {{- with $evaluatedResources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}

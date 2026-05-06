@@ -122,7 +122,6 @@ exporters:
     required_acks: "none"   # allowed: "none", "leader", "all"
     timeout: 30s
     sending_queue:
-      enabled: true
       num_consumers: 10
       queue_size: 1000
     retry_on_failure:
@@ -174,6 +173,13 @@ service:
       exporters:
         - forward
         - stsservicegraph
+    traces/topology:
+      receivers:
+        - forward
+      processors:
+        - resource/removeStsApiKey
+        - attributes/removeStsApiKey
+      exporters:
         - topology
     traces/clickhouse:
       receivers:
@@ -212,9 +218,27 @@ service:
       receivers:
         - forward
         - stsservicegraph
+      processors:
+        - resource/removeStsApiKey
+        - attributes/removeStsApiKey
       exporters:
         - topology
     logs:
+      receivers:
+        - otlp
+      processors:
+        - batch
+      exporters:
+        - forward
+    logs/topology_input:
+      receivers:
+        - forward
+      processors:
+        - resource/removeStsApiKey
+        - attributes/removeStsApiKey
+      exporters:
+        - topology
+    logs/topology:
       receivers:
         - topology
       exporters:

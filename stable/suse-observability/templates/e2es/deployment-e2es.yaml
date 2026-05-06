@@ -1,0 +1,89 @@
+{{- define "stackstate.e2es.deployment.container" -}}
+{{- $sizingResources := include "common.sizing.stackstate.e2es.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.stackstate.components.e2es.resources $sizingResourcesDict }}
+args:
+{{- include "stackstate.service.args" . }}
+- topology-events
+name: e2es
+{{- with $evaluatedResources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+volumeMounts:
+{{- include "stackstate.service.container.volumes" . }}
+{{- end -}}
+
+{{- define "stackstate.e2es.deployment" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+{{- $e2esConfig := dict "E2esName" "e2es" "E2esConfig" .Values.stackstate.components.e2es "esDiskSpaceShare" (sub 100 .Values.stackstate.components.receiver.esDiskSpaceShare) }}
+{{- $commonE2esContainer := fromYaml (include "stackstate.e2es.deployment.common.container" (merge $e2esConfig .)) -}}
+{{- $commonE2esInitContainer := fromYaml (include "stackstate.e2es.deployment.common.initcontainer" .) -}}
+{{- $eventsToEsContainer := fromYaml (include "stackstate.e2es.deployment.container" .) -}}
+metadata:
+  name: {{ template "common.fullname.short" . }}-e2es
+  labels:
+    app.kubernetes.io/component: e2es
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+    {{- include "stackstate.backup.elasticsearch.restore.scaleDownLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.stackstate.components.e2es.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: e2es
+  strategy:
+{{- if eq (lower .Values.stackstate.components.all.deploymentStrategy.type) "recreatesingletonsonly" }}
+    type: RollingUpdate
+{{- else }}
+    {{- toYaml .Values.stackstate.components.all.deploymentStrategy | nindent 4 }}
+{{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- include "common.metrics.annotations" (dict "metrics" .Values.stackstate.components.all.metrics "port" "9404" "container_name" "e2es" "filter" .Values.stackstate.components.e2es.agentMetricsFilter) | indent 8 }}
+        {{- include "stackstate.common.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.e2es.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.e2es.configmap.checksum" . | nindent 8 }}
+        {{- include "stackstate.component.podExtraAnnotations" (merge (dict "Name" "e2es") .) }}
+      labels:
+        app.kubernetes.io/component: e2es
+        {{- include "suse-observability.labels.global" . | nindent 8 }}
+    spec:
+      {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 6 }}
+      initContainers:
+      - {{ toYaml (merge $commonE2esInitContainer $commonContainer) | nindent 8 }}
+      containers:
+      - {{ toYaml (merge $eventsToEsContainer $commonE2esContainer $commonContainer) | nindent 8 }}
+      volumes:
+        {{- include "stackstate.service.pod.volumes" (dict "pod_name" "e2es" "root" . ) | nindent 8 }}
+    {{- if or .Values.stackstate.components.all.nodeSelector .Values.stackstate.components.e2es.nodeSelector }}
+      nodeSelector:
+      {{- with .Values.stackstate.components.all.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.e2es.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" .Values.stackstate.components.e2es.affinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) }}
+    {{- if $affinity }}
+      affinity:
+        {{- $affinity | nindent 8 }}
+    {{- end }}
+    {{- if or .Values.stackstate.components.all.tolerations .Values.stackstate.components.e2es.tolerations }}
+      tolerations:
+      {{- with .Values.stackstate.components.all.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.e2es.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.stackstate.components.all.securityContext.enabled }}
+      securityContext: {{- omit .Values.stackstate.components.all.securityContext "enabled" | toYaml | nindent 8 }}
+    {{- end }}
+{{- end -}}
+
+{{- $commonDeployment := fromYaml (include "common.deployment" .) -}}
+{{- $e2esDeployment := fromYaml (include "stackstate.e2es.deployment" .) -}}
+{{- toYaml (merge $e2esDeployment $commonDeployment) -}}

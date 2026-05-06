@@ -1,0 +1,108 @@
+{{- /* Does not use common.job: uses custom suse-observability.backup.init.jobSpec define */ -}}
+{{- define "suse-observability.backup.init.jobSpec" -}}
+ttlSecondsAfterFinished: {{ include "stackstate.job.ttlSecondsAfterFinished" . }}
+template:
+  metadata:
+  {{- if or .Values.stackstate.components.all.podAnnotations .Values.stackstate.components.backup.podAnnotations }}
+    annotations:
+    {{- with .Values.stackstate.components.all.podAnnotations }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.backup.podAnnotations }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
+    labels:
+      app.kubernetes.io/component: backup
+      {{- include "suse-observability.labels.global" . | nindent 6 }}
+    {{- with .Values.stackstate.components.backup.podLabels }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  spec:
+    initContainers:
+      - name: wait
+        command:
+          - sh
+          - -c
+          - |
+            /entrypoint -c {{ include "stackstate.es.endpoint" . }},{{ include "stackstate.s3proxy.endpoint" . }} -t 300
+        image: "{{include "stackstate.wait.image.registry" .}}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+        imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
+    containers:
+      - name: configure
+        image: "{{include "stackstate.containerTools.image.registry" .}}/{{ .Values.stackstate.components.containerTools.image.repository }}:{{ .Values.stackstate.components.containerTools.image.tag }}"
+        workingDir: /work
+        imagePullPolicy: {{ .Values.stackstate.components.containerTools.image.pullPolicy | quote }}
+        command:
+          - '/backup-restore-scripts/configure-backup.sh'
+        env:
+          {{- include "stackstate.backup.envvars" . | nindent 10 }}
+        {{- with .Values.stackstate.components.containerTools.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+          {{- include "stackstate.backup.volumeMounts" . | nindent 10 }}
+          - name: workdir-container-tools
+            mountPath: /work
+          - name: tmp-data
+            mountPath: /tmp-data
+    {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 4 }}
+    restartPolicy: Never
+{{- if or .Values.stackstate.components.all.nodeSelector .Values.stackstate.components.backup.nodeSelector }}
+    nodeSelector:
+    {{- with .Values.stackstate.components.all.nodeSelector }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.backup.nodeSelector }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" .Values.stackstate.components.backup.affinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) -}}
+{{- if $affinity }}
+    affinity:
+      {{- $affinity | nindent 6 }}
+{{- end }}
+{{- if or .Values.stackstate.components.all.tolerations .Values.stackstate.components.backup.tolerations }}
+    tolerations:
+    {{- with .Values.stackstate.components.all.tolerations }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.backup.tolerations }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- if .Values.backup.stackGraph.securityContext.enabled }}
+    securityContext: {{- omit .Values.backup.stackGraph.securityContext "enabled" | toYaml | nindent 6 }}
+{{- end }}
+    volumes:
+      {{- include "stackstate.backup.volumes" . | nindent 6 }}
+      - name: workdir-container-tools
+        emptyDir: { }
+      - name: tmp-data
+        persistentVolumeClaim:
+          claimName: {{ template "common.fullname.short" . }}-backup-stackgraph-tmp-data
+{{- end -}}
+
+{{- if .Values.global.backup.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- if .Values.deployment.compatibleWithArgoCD }}
+  generateName: backup-init-
+  {{- else }}
+  name: {{ template "common.fullname.short" . }}-backup-init-{{ now | date "02t150405" }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: backup
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+  annotations:
+    {{- if .Values.deployment.compatibleWithArgoCD }}
+    argocd.argoproj.io/hook: Sync
+    {{- end }}
+  {{- with .Values.backup.initJobAnnotations }}
+    {{- toYaml . | nindent 4}}
+  {{- end }}
+spec:
+  {{- include "suse-observability.backup.init.jobSpec" . | nindent 2 }}
+{{- end }}

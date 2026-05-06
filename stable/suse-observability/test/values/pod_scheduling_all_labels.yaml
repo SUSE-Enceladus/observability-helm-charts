@@ -5,6 +5,10 @@ global:
   backup:
     enabled: true
 
+ai:
+  assistant:
+    enabled: "true"
+
 stackstate:
   baseUrl: "http://localhost"
   license:
@@ -32,3 +36,8 @@ stackstate:
           operator: Equal
           value: all-value
           effect: NoSchedule
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true

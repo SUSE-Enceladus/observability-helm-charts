@@ -22,8 +22,13 @@ spec:
   podManagementPolicy: {{ .Values.server.podManagementPolicy }}
   template:
     metadata:
-    {{- if .Values.server.podAnnotations }}
       annotations:
+        checksum/scripts: {{ include (print $.Template.BasePath "/configmap-scripts.yaml") . | sha256sum }}
+        {{- if .Values.global.backup.enabled }}
+        {{- include "common.annotations.checksumObject" (dict "value" .Values.backup "name" "checksum/backup-config") | nindent 8 }}
+        {{- include "common.annotations.checksumObject" (dict "value" .Values.global.s3proxy.credentials "name" "checksum/s3proxy-credentials") | nindent 8 }}
+        {{- end }}
+    {{- if .Values.server.podAnnotations }}
 {{ toYaml .Values.server.podAnnotations | indent 8 }}
     {{- end }}
       labels:
@@ -46,18 +51,26 @@ spec:
             - /bin/sh
           args:
             - -c
-            - 'echo "$INCREMENTAL_PATTERN BUCKET_NAME=$BUCKET_NAME S3_PREFIX=$S3_PREFIX S3_ENDPOINT=$S3_ENDPOINT /app/crontab/scripts/run-victoria-metrics-backup.sh" > /app/crontab/vmbackup'
+            - |
+              echo "$HOURLY_PATTERN BUCKET_NAME=$BUCKET_NAME S3_PREFIX=$S3_PREFIX S3_ENDPOINT=$S3_ENDPOINT /app/crontab/scripts/run-victoria-metrics-backup.sh hourly" > /app/crontab/vmbackup
+              echo "$DAILY_PATTERN BUCKET_NAME=$BUCKET_NAME S3_PREFIX=$S3_PREFIX S3_ENDPOINT=$S3_ENDPOINT KEEP_DAILY=$KEEP_DAILY KEEP_WEEKLY=$KEEP_WEEKLY /app/crontab/scripts/run-victoria-metrics-backup.sh daily" >> /app/crontab/vmbackup
           resources:
 {{ toYaml .Values.backup.setupCron.resources | indent 12 }}
           env:
-            - name: INCREMENTAL_PATTERN
-              value: "{{ tpl .Values.backup.scheduled.schedule . }}"
+            - name: HOURLY_PATTERN
+              value: "{{ include "victoria-metrics.backup.hourlySchedule" . }}"
+            - name: DAILY_PATTERN
+              value: "{{ tpl .Values.backup.scheduled.daily . }}"
             - name: BUCKET_NAME
               value: "{{ tpl .Values.backup.bucketName . }}"
             - name: S3_ENDPOINT
               value: "{{ tpl .Values.backup.overrideS3Endpoint . }}"
             - name: S3_PREFIX
               value: {{ tpl .Values.backup.s3Prefix . | quote }}
+            - name: KEEP_DAILY
+              value: {{ .Values.backup.keepLastDaily | quote }}
+            - name: KEEP_WEEKLY
+              value: {{ .Values.backup.keepLastWeekly | quote }}
           securityContext:
             {{- $commonContainer.securityContext | toYaml | nindent 12 }}
           volumeMounts:
@@ -332,10 +345,10 @@ spec:
         resources:
           requests:
 {{- $storageSize := include "common.sizing.victoria-metrics.storage" $ | trim -}}
-{{- if $storageSize }}
-            storage: "{{ $storageSize }}"
-{{- else }}
+{{- if .Values.server.persistentVolume.size }}
             storage: "{{ .Values.server.persistentVolume.size }}"
+{{- else }}
+            storage: "{{ $storageSize }}"
 {{- end }}
        {{ include "common.storage.class" ( dict "persistence" .Values.server.persistentVolume "global" .Values.global) | nindent 8 }}
       {{- with .Values.server.persistentVolume.matchLabels }}

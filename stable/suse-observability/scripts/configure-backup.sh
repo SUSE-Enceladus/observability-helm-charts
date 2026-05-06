@@ -5,44 +5,6 @@ export AWS_ACCESS_KEY_ID
 AWS_ACCESS_KEY_ID="$(cat /aws-keys/accesskey)"
 export AWS_SECRET_ACCESS_KEY
 AWS_SECRET_ACCESS_KEY="$(cat /aws-keys/secretkey)"
-export MC_HOST_minio="http://${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}@${MINIO_ENDPOINT}"
-MC_WITH_CONFIG_DIR="/work/.mc"
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_STACKGRAPH_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_STACKGRAPH_BUCKET_NAME}/${BACKUP_STACKGRAPH_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_STACKGRAPH_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_STACKGRAPH_BUCKET_NAME}"
-fi
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_CONFIGURATION_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_CONFIGURATION_BUCKET_NAME}/${BACKUP_CONFIGURATION_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_CONFIGURATION_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_CONFIGURATION_BUCKET_NAME}"
-fi
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_VICTORIA_METRICS_0_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_VICTORIA_METRICS_0_BUCKET_NAME}/${BACKUP_VICTORIA_METRICS_1_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_VICTORIA_METRICS_0_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_VICTORIA_METRICS_0_BUCKET_NAME}"
-fi
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_VICTORIA_METRICS_1_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_VICTORIA_METRICS_1_BUCKET_NAME}/${BACKUP_VICTORIA_METRICS_1_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_VICTORIA_METRICS_1_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_VICTORIA_METRICS_1_BUCKET_NAME}"
-fi
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_CLICKHOUSE_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_CLICKHOUSE_BUCKET_NAME}/${BACKUP_CLICKHOUSE_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_CLICKHOUSE_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_CLICKHOUSE_BUCKET_NAME}"
-fi
-
-echo "=== Testing for existence of MinIO bucket \"${BACKUP_ELASTICSEARCH_BUCKET_NAME}\"..."
-if ! mc -C "$MC_WITH_CONFIG_DIR" ls "minio/${BACKUP_ELASTICSEARCH_BUCKET_NAME}/${BACKUP_ELASTICSEARCH_S3_PREFIX}" >/dev/null ; then
-    echo "=== Creating MinIO bucket \"${BACKUP_ELASTICSEARCH_BUCKET_NAME}\"..."
-    mc -C "$MC_WITH_CONFIG_DIR" mb "minio/${BACKUP_ELASTICSEARCH_BUCKET_NAME}"
-fi
 
 echo "=== Configuring ElasticSearch snapshot repository \"${BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_REPOSITORY_NAME}\" for bucket \"${BACKUP_ELASTICSEARCH_BUCKET_NAME}\"..."
 SC=$(curl --request PUT "http://${ELASTICSEARCH_ENDPOINT}/_snapshot/${BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_REPOSITORY_NAME}?pretty" --header "Content-Type: application/json" --data "
@@ -50,8 +12,8 @@ SC=$(curl --request PUT "http://${ELASTICSEARCH_ENDPOINT}/_snapshot/${BACKUP_ELA
     \"type\": \"s3\",
     \"settings\": {
         \"bucket\": \"${BACKUP_ELASTICSEARCH_BUCKET_NAME}\",
-        \"region\": \"minio\",
-        \"endpoint\": \"${MINIO_ENDPOINT}\",
+        \"region\": \"us-east-1\",
+        \"endpoint\": \"http://${S3_ENDPOINT}\",
         \"base_path\": \"${BACKUP_ELASTICSEARCH_S3_PREFIX}\",
         \"protocol\": \"http\",
         \"access_key\": \"${AWS_ACCESS_KEY_ID}\",

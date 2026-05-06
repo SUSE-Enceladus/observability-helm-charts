@@ -8,8 +8,10 @@ Get victoria-metrics-0 server resources
 Usage: {{ include "common.sizing.victoria-metrics-0.server.resources" . }}
 */}}
 {{- define "common.sizing.victoria-metrics-0.server.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" -}}
 requests:
   cpu: 500m
@@ -33,10 +35,10 @@ limits:
   memory: 2500Mi
 {{- else if eq $profile "50-nonha" -}}
 requests:
-  cpu: "1000m"
+  cpu: 1
   memory: 3500Mi
 limits:
-  cpu: "2000m"
+  cpu: 2
   memory: 3500Mi
 {{- else if eq $profile "100-nonha" -}}
 requests:
@@ -69,11 +71,17 @@ limits:
 {{- else if eq $profile "4000-ha" -}}
 requests:
   cpu: "7"
-  memory: 16Gi
+  memory: 18Gi
 limits:
   cpu: 8000m
   memory: 18Gi
-{{- end -}}
+{{- else -}}
+requests:
+  cpu: 300m
+  memory: 3584Mi
+limits:
+  cpu: 1
+  memory: 4Gi
 {{- end -}}
 {{- end -}}
 
@@ -116,8 +124,10 @@ Get victoria-metrics-1 server resources
 Usage: {{ include "common.sizing.victoria-metrics-1.server.resources" . }}
 */}}
 {{- define "common.sizing.victoria-metrics-1.server.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "150-ha" }}
 requests:
   cpu: 2
@@ -142,11 +152,17 @@ limits:
 {{- else if eq $profile "4000-ha" }}
 requests:
   cpu: 7
-  memory: 16Gi
+  memory: 18Gi
 limits:
   cpu: 8000m
   memory: 18Gi
-{{- end }}
+{{- else }}
+requests:
+  cpu: 300m
+  memory: 3584Mi
+limits:
+  cpu: 1
+  memory: 4Gi
 {{- end }}
 {{- end }}
 
@@ -172,12 +188,14 @@ Get victoria-metrics storage size based on sizing profile
 Usage: {{ include "common.sizing.victoria-metrics.storage" . }}
 */}}
 {{- define "common.sizing.victoria-metrics.storage" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}10Gi
 {{- else if or (eq $profile "10-nonha") (eq $profile "20-nonha") (eq $profile "50-nonha") (eq $profile "100-nonha") }}50Gi
 {{- else if eq $profile "4000-ha" }}400Gi
-{{- end }}
+{{- else }}250Gi
 {{- end }}
 {{- end }}
 
@@ -186,10 +204,11 @@ Get victoria-metrics retention period based on sizing profile
 Usage: {{ include "common.sizing.victoria-metrics.retention" . }}
 */}}
 {{- define "common.sizing.victoria-metrics.retention" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}3d
-{{- end }}
 {{- end }}
 {{- end }}
 

@@ -1,0 +1,134 @@
+{{- /* Does not use common.job: complex standalone job with custom init containers */ -}}
+{{- define "stackstate.kafkaTopicCreate.job.initContainer.main" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+name: kafka-topic-create-init
+command:
+- sh
+- -c
+- |
+  /entrypoint -c {{ include "stackstate.kafka.endpoint" . }} -t 300
+image: "{{include "stackstate.wait.image.registry" .}}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
+securityContext:
+  {{- $commonContainer.securityContext | toYaml | nindent 2 }}
+{{- end }}
+
+{{- define "stackstate.kafkaTopicCreate.job.container.main" -}}
+{{- $profileEnv := include "common.sizing.stackstate.kafkaTopicCreate.env" . | trim -}}
+{{- $evaluatedExtraEnvOpen := .Values.stackstate.components.kafkaTopicCreate.extraEnv.open }}
+{{- if $profileEnv }}
+{{- $profileEnvDict := fromYaml $profileEnv }}
+{{- $evaluatedExtraEnvOpen = merge (dict) $evaluatedExtraEnvOpen $profileEnvDict }}
+{{- end }}
+command:
+- bash
+- -c
+- |
+  {{ .Files.Get "scripts/job-kafka-topic-create.sh" | nindent 2 }}
+env:
+
+- name: KAFKA_REPLICAS
+  {{ $sizingReplicaCount := include "common.sizing.kafka.replicaCount" . | trim -}}
+  value: {{ include "common.sizing.effectiveReplicaCount" (dict "sizingReplicaCount" $sizingReplicaCount "chartDefault" "3" "valuesReplicaCount" .Values.kafka.replicaCount) | quote }}
+- name: KAFKA_TOPIC_RETENTION
+  value: {{ include "stackstate.kafka.topicRetention" . | quote }}
+- name: KAFKA_BROKERS
+  value: {{ include "stackstate.kafka.endpoint" . | quote }}
+- name: ZOOKEEPER_QUORUM
+  value: {{ include "stackgraph.zookeeper.endpoint" . | quote }}
+- name: STS_METRICS_V2_PARTITION_COUNT
+  value: {{ include "stackstate.kafka.topic.stsMetricsV2.partitionCount" . | quote }}
+{{- if $evaluatedExtraEnvOpen }}
+  {{- range $key, $value := $evaluatedExtraEnvOpen  }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+image: "{{include "stackstate.kafkaTopicCreate.image.registry" .}}/{{ .Values.stackstate.components.kafkaTopicCreate.image.repository }}:{{ .Values.stackstate.components.kafkaTopicCreate.image.tag }}"
+imagePullPolicy: {{ .Values.stackstate.components.kafkaTopicCreate.image.pullPolicy | quote }}
+name: kafka-topic-create
+{{- with .Values.stackstate.components.kafkaTopicCreate.resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- define "stackstate.kafkaTopicCreate.job" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+{{- $overrideContainer := fromYaml (include "stackstate.kafkaTopicCreate.job.container.main" .) -}}
+{{- $stsstackstateKafkaTopicCreateMainContainer := (merge $overrideContainer $commonContainer) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- if .Values.deployment.compatibleWithArgoCD }}
+  generateName: topic-create-
+  {{- else }}
+  name: {{ template "common.fullname.short" . }}-topic-create-{{ now | date "02t150405" }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: topic-create
+    {{- include "common.labels.standard" . | nindent 4 }}
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+  annotations:
+    {{- if .Values.deployment.compatibleWithArgoCD }}
+    argocd.argoproj.io/hook: Sync
+    {{- end }}
+  {{- with .Values.stackstate.components.kafkaTopicCreate.jobAnnotations }}
+    {{- toYaml . | nindent 4}}
+  {{- end }}
+spec:
+  backoffLimit: 20
+  ttlSecondsAfterFinished: {{ include "stackstate.job.ttlSecondsAfterFinished" . }}
+  template:
+    metadata:
+      annotations:
+        {{- include "stackstate.common.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.server.secret.checksum" . | nindent 8 }}
+      {{- with .Values.stackstate.components.all.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.kafkaTopicCreate.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/component: topic-create
+        {{- include "suse-observability.labels.global" . | nindent 8 }}
+      {{- with .Values.stackstate.components.kafkaTopicCreate.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - {{ include "stackstate.kafkaTopicCreate.job.initContainer.main" . | nindent 8 }}
+      containers:
+      - {{ toYaml $stsstackstateKafkaTopicCreateMainContainer | nindent 8 }}
+      {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 6 }}
+    {{- if or .Values.stackstate.components.all.nodeSelector .Values.stackstate.components.kafkaTopicCreate.nodeSelector }}
+      nodeSelector:
+      {{- with .Values.stackstate.components.all.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.kafkaTopicCreate.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" .Values.stackstate.components.kafkaTopicCreate.affinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) }}
+    {{- if $affinity }}
+      affinity:
+        {{- $affinity | nindent 8 }}
+    {{- end }}
+    {{- if or .Values.stackstate.components.all.tolerations .Values.stackstate.components.kafkaTopicCreate.tolerations }}
+      tolerations:
+      {{- with .Values.stackstate.components.all.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.kafkaTopicCreate.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.stackstate.components.kafkaTopicCreate.securityContext.enabled }}
+      securityContext: {{- omit .Values.stackstate.components.kafkaTopicCreate.securityContext "enabled" | toYaml | nindent 8 }}
+    {{- end }}
+{{- end -}}
+
+{{ include "stackstate.kafkaTopicCreate.job" . }}

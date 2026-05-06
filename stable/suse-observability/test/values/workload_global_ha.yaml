@@ -1,0 +1,44 @@
+global:
+  receiverApiKey: "test-key"
+  imagePullUsername: "test"
+  imagePullPassword: "secret"
+  imageRegistry: "my.registry.com"
+  commonLabels:
+    environment: "production"
+    team: "platform"
+    deployment: "ha"
+  backup:
+    enabled: true
+  suseObservability:
+    license: "test-license-key-12345"
+    baseUrl: "http://test.example.com"
+    adminPassword: "tssss"
+    sizing:
+      profile: "150-ha"
+
+ai:
+  assistant:
+    enabled: "true"
+
+stackstate:
+  components:
+    all:
+      metricStore:
+        remoteWriteEndpoint: "test-$vmInstance:8148"
+        queryApiEndpoint: "test:8148"
+    server:
+      java:
+        trustStorePassword: "secretTrustStorePassword"
+    trace2es:
+      enabled: true
+  allowedOrigins:
+    - https://rancher.localhost
+  k8sAuthorization:
+    enabled: true
+anomaly-detection:
+  enabled: true
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true

@@ -32,7 +32,16 @@ local skip_when_dependency_upgrade = {
     @'if': '$UPDATE_STACKSTATE_DOCKER_VERSION',
     when: 'never',
   }, {
+    @'if': '$UPDATE_MCP_DOCKER_VERSION',
+    when: 'never',
+  }, {
+    @'if': '$UPDATE_AI_ASSISTANT_DOCKER_VERSION',
+    when: 'never',
+  }, {
     @'if': '$UPDATE_STACKPACKS_DOCKER_VERSION',
+    when: 'never',
+  }, {
+    @'if': '$RUN_UPDATECLI',
     when: 'never',
   }] + super.rules,
 };
@@ -113,6 +122,44 @@ local check_chart_version_jobs = {
   if chart != 'stackstate' && chart != 'suse-observability'
 };
 
+// Validation jobs for suse-observability-sizing chart (not in charts/public_charts lists)
+local check_sizing_chart_jobs = {
+  // Checks if suse-observability-sizing version has been bumped.
+  // Adding suse-observability-sizing to the .jsonnet-libs/extras/helm_chart_repo/variables.libsonnet charts list generates
+  // build, validate, test, and push jobs - which is unnecessary overhead for a library chart that's only used as a dependency.
+  'check_suse-observability-sizing_version': {
+    image: variables.images.chart_testing,
+    before_script: ['.gitlab/validate_before_script.sh'],
+    script: [
+      '.gitlab/verify_versions_bumped.sh suse-observability-sizing',
+    ],
+    stage: 'validate',
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['stable/suse-observability-sizing/**/*'],
+      },
+    ],
+  },
+  // Validates that all dependent charts have updated their dependency versions.
+  // Runs after version check passes to ensure we're checking against the correct version.
+  check_sizing_chart_dependencies: {
+    image: variables.images.chart_testing,
+    before_script: ['pip install pyyaml'],
+    script: [
+      'python3 scripts/bump-chart-version/bump_chart_version.py --check suse-observability-sizing',
+    ],
+    stage: 'validate',
+    needs: ['check_suse-observability-sizing_version'],
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['stable/suse-observability-sizing/**/*'],
+      },
+    ],
+  },
+};
+
 // Runs unit tests on all charts with "test" directory
 local test_chart_job(chart) = {
   image: variables.images.stackstate_helm_test,
@@ -173,33 +220,6 @@ local resource_usage = {
       ],
     },
     cache: go_cache,
-  },
-};
-
-// Push charts to `helm-test.stackstate.io` registry
-local push_test_charts_jobs = {
-  push_test_charts: {
-    image: variables.images.stackstate_devops,
-    script: [
-      'source .gitlab/aws_auth_setup.sh',
-      'sh test/sync-repo.sh',
-    ],
-    rules: [
-      {
-        @'if': '$CI_COMMIT_BRANCH == "master"',
-        when: 'never',
-      },
-      {
-        @'if': '$CI_COMMIT_TAG',
-        when: 'never',
-      },
-      { when: 'on_success' },
-    ],
-    variables: {
-      AWS_BUCKET: 's3://helm-test.stackstate.io',
-      REPO_URL: 'https://helm-test.stackstate.io/',
-    },
-    stage: 'push-charts-to-test',
   },
 };
 
@@ -281,7 +301,7 @@ local push_charts_to_internal_jobs = {
                                         '${CHARTMUSEUM_INTERNAL_PASSWORD}',
                                       ),
                                       'on_success',
-                                      if chart == 'suse-observability-agent' then 'publish-suse-observability-agent' else if chart == 'stackstate-k8s-agent' then 'publish-k8s-agent' else 'publish-' + chart
+                                      if chart == 'suse-observability-agent' then 'publish-suse-observability-agent' else 'publish-' + chart
                                     ) + {
                                       stage: 'push-charts-to-internal',
                                     } + (
@@ -315,7 +335,7 @@ local push_charts_to_public_jobs = {
                                       '${CHARTMUSEUM_PASSWORD}',
                                     ),
                                     'manual',
-                                    if chart == 'suse-observability-agent' then 'publish-suse-observability-agent' else if chart == 'stackstate-k8s-agent' then 'publish-k8s-agent' else 'publish-' + chart
+                                    if chart == 'suse-observability-agent' then 'publish-suse-observability-agent' else 'publish-' + chart
                                   ) + {
                                     stage: 'push-charts-to-public',
 
@@ -392,6 +412,83 @@ local update_aad_chart_version = {
   },
 };
 
+local updatecli_job = {
+  update_helm_chart_docker_images: {
+    image: variables.images.container_tools_dev,
+    stage: 'update',
+    variables: {
+      UPDATE_CLI_EMAIL: '$STACKSTATE_SYSTEM_USER_EMAIL',
+      UPDATE_CLI_USER: '$STACKSTATE_SYSTEM_USER_NAME',
+    },
+    before_script: [
+      '.gitlab/configure_git.sh',
+      'export GITLAB_TOKEN="$gitlab_api_scope_token"',
+      'export UPDATE_CLI_PGP_KEY="$(cat $STACKSTATE_SYSTEM_USER_PGP_KEY)"',
+      'export UPDATE_CLI_PGP_PASSPHRASE="$STACKSTATE_SYSTEM_USER_PGP_PASS_PHRASE"',
+    ],
+    rules: [
+      {
+        @'if': '$RUN_UPDATECLI',
+        when: 'always',
+      },
+      {
+        when: 'never',
+      },
+    ],
+    script: [
+      'updatecli apply -c updatecli/updatecli.d/update-docker-images/ -v updatecli/values.d/values.yaml',
+    ],
+  },
+  finalize_helm_chart_docker_images: {
+    image: variables.images.container_tools_dev,
+    stage: 'update',
+    variables: {
+      UPDATE_CLI_EMAIL: '$STACKSTATE_SYSTEM_USER_EMAIL',
+      UPDATE_CLI_USER: '$STACKSTATE_SYSTEM_USER_NAME',
+    },
+    before_script: [
+      '.gitlab/configure_git.sh',
+      'export GITLAB_TOKEN="$gitlab_api_scope_token"',
+      'export UPDATE_CLI_PGP_KEY="$(cat $STACKSTATE_SYSTEM_USER_PGP_KEY)"',
+      'export UPDATE_CLI_PGP_PASSPHRASE="$STACKSTATE_SYSTEM_USER_PGP_PASS_PHRASE"',
+    ],
+    rules: [
+      {
+        @'if': '$RUN_UPDATECLI',
+        when: 'always',
+      },
+      {
+        when: 'never',
+      },
+    ],
+    needs: ['update_helm_chart_docker_images'],
+    script: [
+      'updatecli apply -c updatecli/updatecli.d/finalize-docker-images/ -v updatecli/values.d/values.yaml',
+    ],
+  },
+  open_updatecli_docker_images_mr: {
+    image: variables.images.container_tools_dev,
+    stage: 'update',
+    before_script: [
+      '.gitlab/configure_git.sh',
+      'export GITLAB_TOKEN="$gitlab_api_scope_token"',
+    ],
+    rules: [
+      {
+        @'if': '$RUN_UPDATECLI',
+        when: 'always',
+      },
+      {
+        when: 'never',
+      },
+    ],
+    needs: ['finalize_helm_chart_docker_images'],
+    script: [
+      '.gitlab/open_updatecli_mr.sh updatecli-master-docker-images master "[master] Bump helm chart docker images"',
+    ],
+  },
+};
+
 local update_docker_images = {
   local job(requiredEnvName, scripts) = {
     image: variables.images.stackstate_devops,
@@ -415,7 +512,41 @@ local update_docker_images = {
   },
 
   update_stackstate_version_to_latest: job('UPDATE_STACKSTATE_DOCKER_VERSION', ['.gitlab/suse-observability/update_stackstate_version_to_latest.sh']),
+  update_mcp_version_to_latest: job('UPDATE_MCP_DOCKER_VERSION', ['.gitlab/suse-observability/update_mcp_version_to_latest.sh']),
+  update_ai_assistant_version_to_latest: job('UPDATE_AI_ASSISTANT_DOCKER_VERSION', ['.gitlab/suse-observability/update_ai_assistant_version_to_latest.sh']),
   update_stackpacks_version_to_latest: job('UPDATE_STACKPACKS_DOCKER_VERSION', ['.gitlab/suse-observability/update_stackpacks_version_to_latest.sh']),
+};
+
+local validate_updatecli_config = {
+  validate_updatecli_config: {
+    image: variables.images.chart_testing,
+    stage: 'validate',
+    script: [
+      'echo "Updatecli config changes detected — validating file structure"',
+      'test -f updatecli/values.d/values.yaml',
+      'yamllint -d "{rules: {document-start: disable, line-length: disable}}" updatecli/values.d/values.yaml',
+    ],
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['updatecli/**/*'],
+      },
+    ],
+  },
+  validate_updatecli_diff: {
+    image: variables.images.container_tools_dev,
+    stage: 'validate',
+    script: [
+      'export GITLAB_TOKEN="$gitlab_api_scope_token"',
+      'updatecli diff --config updatecli/updatecli.d/update-docker-images/ --values updatecli/values.d/values.yaml',
+    ],
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['updatecli/**/*'],
+      },
+    ],
+  },
 };
 
 local beest_triggers = {
@@ -468,12 +599,13 @@ local beest_triggers = {
 
 // Main
 {
-  // Only run for merge requests, tags, or the default (master) branch
+  // Only run for merge requests, tags, the default (master) branch, or explicitly requested update pipelines
   workflow: {
     rules: [
       { @'if': '$CI_MERGE_REQUEST_IID' },
       { @'if': '$CI_COMMIT_TAG' },
       { @'if': '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' },
+      { @'if': '$RUN_UPDATECLI' },
     ],
   },
   image: variables.images.chart_testing,
@@ -486,9 +618,10 @@ local beest_triggers = {
 }
 + build_chart_jobs
 + validate_chart_jobs
++ validate_updatecli_config
 + check_chart_version_jobs
++ check_sizing_chart_jobs
 + test_chart_jobs
-+ push_test_charts_jobs
 + resource_usage
 
 + push_charts_to_internal_jobs
@@ -496,6 +629,7 @@ local beest_triggers = {
 + push_stackstate_chart_releases
 + update_sg_version
 + update_aad_chart_version
++ updatecli_job
 + update_docker_images
 + push_suse_observability_to_rancher_registry
 + beest_triggers

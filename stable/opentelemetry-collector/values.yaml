@@ -398,7 +398,7 @@ ports:
     hostPort: 4317
     protocol: TCP
     # nodePort: 30317
-    appProtocol: grpc
+    appProtocol: kubernetes.io/h2c
   otlp-http:
     enabled: true
     containerPort: 4318
@@ -618,6 +618,7 @@ ingress:
   #       - path: /
   #         pathType: Prefix
   #         port: 4318
+  #         serviceName: ""  # Optional: override the backend service name. Defaults to the main service.
   # tls:
   #   - secretName: collector-tls
   #     hosts:
@@ -636,10 +637,34 @@ ingress:
   #         - path: /
   #           pathType: Prefix
   #           port: 4318
+  #           serviceName: ""  # Optional: override the backend service name. Defaults to the main service.
   #   tls:
   #     - secretName: collector-tls
   #       hosts:
   #         - collector.example.com
+
+# gateway -- Configure Kubernetes Gateway API routes for OpenTelemetry Collector.
+gateway:
+  # gateway.enabled -- Enable Gateway API routes for OpenTelemetry Collector.
+  enabled: false
+  # gateway.kind -- The type of Gateway API route to create. Valid values: "HTTPRoute" or "GRPCRoute".
+  kind: HTTPRoute
+  # gateway.annotations -- Annotations for the route resource.
+  annotations: {}
+  # gateway.parentRefs -- List of parent Gateway references.
+  parentRefs: []
+  # gateway.hostnames -- List of hostnames for the route.
+  hostnames: []
+  # gateway.path -- Path prefix for HTTPRoute rules.
+  path: "/"
+  # gateway.pathType -- Path match type for HTTPRoute.
+  pathType: PathPrefix
+  # gateway.filters -- Optional filters for the route rule.
+  filters: []
+  # gateway.timeouts -- Optional timeouts for HTTPRoute rules.
+  timeouts: {}
+  # gateway.additionalGateways -- Additional gateway routes (e.g. for both HTTP and gRPC).
+  additionalGateways: []
 
 podMonitor:
   # The pod monitor by default scrapes the metrics port.

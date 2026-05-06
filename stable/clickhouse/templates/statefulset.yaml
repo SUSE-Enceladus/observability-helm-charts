@@ -33,6 +33,10 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
         checksum/config-extra: {{ include (print $.Template.BasePath "/configmap-extra.yaml") $ | sha256sum }}
         checksum/config-users-extra: {{ include (print $.Template.BasePath "/configmap-users-extra.yaml") $ | sha256sum }}
+        {{- if $.Values.global.backup.enabled }}
+        {{- include "common.annotations.checksumObject" (dict "value" $.Values.global.s3proxy.credentials "name" "checksum/s3proxy-credentials") | nindent 8 }}
+        {{- include "common.annotations.checksumObject" (dict "value" $.Values.backup "name" "checksum/backup-config") | nindent 8 }}
+        {{- end }}
         {{- if $.Values.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" $.Values.podAnnotations "context" $) | nindent 8 }}
         {{- end }}
@@ -92,7 +96,7 @@ spec:
           {{- $evaluatedResources := $.Values.resources }}
           {{- if $profileResources }}
           {{- $profileResourcesDict := fromYaml $profileResources }}
-          {{- $evaluatedResources = merge $profileResourcesDict $.Values.resources }}
+          {{- $evaluatedResources = merge (dict) $.Values.resources $profileResourcesDict }}
           {{- end }}
           {{- with $evaluatedResources }}
           resources: {{- toYaml . | nindent 12 }}
@@ -249,7 +253,7 @@ spec:
           {{- $evaluatedResources := $.Values.resources }}
           {{- if $profileResources }}
           {{- $profileResourcesDict := fromYaml $profileResources }}
-          {{- $evaluatedResources = merge $profileResourcesDict $.Values.resources }}
+          {{- $evaluatedResources = merge (dict) $.Values.resources $profileResourcesDict }}
           {{- end }}
           {{- with $evaluatedResources }}
           resources: {{- toYaml . | nindent 12 }}
@@ -432,8 +436,8 @@ spec:
         {{- end }}
         resources:
           requests:
-            {{ $storageSize := include "common.sizing.clickhouse.persistence.size" $ | trim }}
-            storage: {{ $storageSize | default (include "common.tplvalues.render" (dict "value" $.Values.persistence.size "context" $)) | quote }}
+            {{ $chSizing := include "common.sizing.clickhouse.persistence.size" $ | trim }}
+            storage: {{ default $chSizing $.Values.persistence.size | quote }}
         {{- if $.Values.persistence.selector }}
         selector: {{- include "common.tplvalues.render" (dict "value" $.Values.persistence.selector "context" $) | nindent 10 }}
         {{- end }}

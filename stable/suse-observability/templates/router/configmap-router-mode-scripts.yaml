@@ -1,0 +1,24 @@
+{{- /* Does not use common.configmap: Helm hook + ArgoCD annotations would conflict with common merge */ -}}
+{{- if eq .Values.stackstate.components.router.mode.status "automatic" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "common.fullname.short" . }}-router-mode-scripts
+  labels:
+    app.kubernetes.io/component: router-mode
+  annotations:
+    {{- if .Values.deployment.compatibleWithArgoCD }}
+    argocd.argoproj.io/hook: PreSync,PostSync,PostDelete
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "-2"
+    {{- else }}
+    "helm.sh/hook": pre-install,pre-upgrade,post-install,post-upgrade,post-delete
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+data:
+  set-maintenance.sh: |-
+    {{- tpl (.Files.Get "scripts/router-mode/set-maintenance.sh") . | trim | nindent 4 }}
+  set-active.sh: |-
+    {{- tpl (.Files.Get "scripts/router-mode/set-active.sh") . | trim | nindent 4 }}
+{{- end }}

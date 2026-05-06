@@ -2,7 +2,7 @@
 Logic to determine remote write endpoint for single node deployment of Victoria Metrics.
 */}}
 {{- define "stackstate.metrics.victoriametrics.singleNode.remotewrite.url" -}}
-http://{{- include "stackstate.metrics.victoriametrics.singleNode.remoteWriteEndpoint" . -}}{{.Values.stackstate.components.all.metricStore.remoteWritePath}}
+http://{{- include "stackstate.metrics.victoriametrics.singleNode.remoteWriteEndpoint" . -}}{{ include "stackstate.metricStore.remoteWritePath" . }}
 {{- end -}}
 
 {{/*
@@ -30,36 +30,21 @@ Logic to determine metric store consumer group
 Logic to determine ElasticSearch endpoint.
 */}}
 {{- define "stackstate.es.endpoint" -}}
-{{- if .Values.elasticsearch.enabled -}}
-{{- .Values.elasticsearch.clusterName -}}-{{ .Values.elasticsearch.nodeGroup }}-headless:9200
-{{- else -}}
-{{- .Values.stackstate.components.all.elasticsearchEndpoint -}}
-{{- end -}}
+{{- include "stackstate.elasticsearch.fullname" . -}}-master-headless:9200
 {{- end -}}
 
 {{/*
 Logic to determine ElasticSearch host.
 */}}
 {{- define "stackstate.es.host" -}}
-{{- .Values.elasticsearch.clusterName -}}-{{ .Values.elasticsearch.nodeGroup }}-headless
+{{- include "stackstate.elasticsearch.fullname" . -}}-master-headless
 {{- end -}}
 
 {{/*
 Logic to determine Kafka endpoint.
 */}}
 {{- define "stackstate.kafka.endpoint" -}}
-{{- if .Values.kafka.enabled -}}
-{{- .Values.kafka.fullnameOverride -}}-headless:9092
-{{- else -}}
-{{- .Values.stackstate.components.all.kafkaEndpoint -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-Logic to determine MinIO endpoint.
-*/}}
-{{- define "stackstate.minio.endpoint" -}}
-{{- .Values.minio.fullnameOverride -}}:9000
+{{- include "stackstate.kafka.fullname" . -}}-headless:9092
 {{- end -}}
 
 {{/*
@@ -73,25 +58,21 @@ http://{{ template "stackstate.router.name" . }}:8080
 Logic to determine MinIO keys.
 */}}
 {{- define "stackstate.minio.keys" -}}
-{{- .Values.minio.fullnameOverride -}}
+{{- include "stackstate.s3proxy.secretName" . -}}
 {{- end -}}
 
 {{/*
 Logic to determine Zookeeper endpoint.
 */}}
 {{- define "stackstate.zookeeper.endpoint" -}}
-{{- if .Values.zookeeper.enabled -}}
-{{- .Values.zookeeper.fullnameOverride -}}-headless:2181
-{{- else -}}
-{{- .Values.stackstate.components.all.zookeeperEndpoint -}}
-{{- end -}}
+{{- include "stackstate.zookeeper.fullname" . -}}-headless:2181
 {{- end -}}
 
 {{/*
 Clickhouse endpoint.
 */}}
 {{- define "stackstate.clickhouse.endpoint" -}}
-{{- .Values.clickhouse.fullnameOverride }}-headless:8123
+{{- include "stackstate.clickhouse.fullname" . -}}-headless:8123
 {{- end -}}
 
 {{/*
@@ -121,9 +102,7 @@ Comma-separated list of the endpoints that need to be up to consider hdfs runnin
 Comma-separated list of the endpoints that need to be up and running before the initializer can be started.
 */}}
 {{ define "stackstate.initializer.prerequisites" -}}
-{{- if .Values.clickhouse.enabled -}}
 {{- include "stackstate.clickhouse.endpoint" . -}},
-{{- end -}}
 {{- include "stackstate.kafka.endpoint" . -}},
 {{- include "stackgraph.hbase.waitfor" . -}}
 {{- end -}}
@@ -132,11 +111,7 @@ Comma-separated list of the endpoints that need to be up and running before the 
 Logic to determine Kafka endpoint.
 */}}
 {{- define "stackstate.vmagent.endpoint" -}}
-{{- if .Values.stackstate.components.vmagent.fullNameOverride -}}
-{{- .Values.stackstate.components.vmagent.fullNameOverride -}}
-{{- else -}}
-http://{{ template "common.fullname.short" . }}-vmagent
-{{- end -}}
+{{- include "stackstate.vmagent.fullname" . -}}
 {{- end -}}
 
 {{/*

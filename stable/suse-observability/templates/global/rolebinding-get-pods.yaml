@@ -1,0 +1,36 @@
+{{- define "stackstate.rolebinding.get-pods" -}}
+metadata:
+  name: {{ template "common.fullname.short" . }}-get-pods
+roleRef:
+  kind: Role
+  name: {{ template "common.fullname.short" . }}-get-pods
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+{{- if include "suse-observability.features.enabled" (dict "key" "server.split" "context" .) }}
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-api
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-authorization-sync
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-checks
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-initializer
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-slicing
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-state
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-sync
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-notification
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-health-sync
+{{- else }}
+- kind: ServiceAccount
+  name: {{ template "common.fullname.short" . }}-server
+{{- end -}}
+{{- end -}}
+
+{{- $commonRoleBinding := fromYaml (include "common.rolebinding" .) -}}
+{{- $getPodsRoleBinding := fromYaml (include "stackstate.rolebinding.get-pods" .) -}}
+{{- toYaml (merge $getPodsRoleBinding $commonRoleBinding) -}}

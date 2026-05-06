@@ -8,15 +8,17 @@ Get elasticsearch storage size based on sizing profile
 Usage: {{ include "common.sizing.elasticsearch.storage" . }}
 */}}
 {{- define "common.sizing.elasticsearch.storage" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}20Gi
 {{- else if eq $profile "10-nonha" }}50Gi
 {{- else if eq $profile "20-nonha" }}50Gi
 {{- else if eq $profile "50-nonha" }}50Gi
 {{- else if eq $profile "100-nonha" }}100Gi
 {{- else if eq $profile "150-ha" }}200Gi
-{{- end }}
+{{- else }}250Gi
 {{- end }}
 {{- end }}
 
@@ -25,8 +27,10 @@ Get elasticsearch resources based on sizing profile
 Usage: {{ include "common.sizing.elasticsearch.resources" . }}
 */}}
 {{- define "common.sizing.elasticsearch.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") }}
 requests:
   cpu: 500m
@@ -50,19 +54,27 @@ limits:
   memory: 4Gi
 {{- else if eq $profile "100-nonha" }}
 requests:
-  cpu: 750m
-  memory: 7Gi
+  cpu: 1000m
+  memory: 5Gi
 limits:
-  cpu: 1500m
-  memory: 7Gi
+  cpu: 2000m
+  memory: 5Gi
 {{- else if eq $profile "4000-ha" }}
 requests:
   cpu: "4"
-  memory: 4Gi
+  memory: 5Gi
 limits:
   cpu: "6"
-  memory: 4Gi
-{{- end }}
+  memory: 5Gi
+{{- else }}
+requests:
+  cpu: "1000m"
+  memory: "5Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "2000m"
+  memory: "5Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -71,11 +83,12 @@ Get elasticsearch replicas based on sizing profile
 Usage: {{ include "common.sizing.elasticsearch.replicas" . }}
 */}}
 {{- define "common.sizing.elasticsearch.replicas" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") (eq $profile "20-nonha") (eq $profile "50-nonha") (eq $profile "100-nonha") }}1
 {{- else }}3
-{{- end }}
 {{- end }}
 {{- end }}
 
@@ -110,11 +123,14 @@ Get Elasticsearch esJavaOpts
 Usage: {{ include "common.sizing.elasticsearch.esJavaOpts" . }}
 */}}
 {{- define "common.sizing.elasticsearch.esJavaOpts" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") (eq $profile "20-nonha") -}}
 -Xmx1500m -Xms1500m -Des.allow_insecure_settings=true
-{{- end -}}
+{{- else -}}
+-Xmx3g -Xms3g -Des.allow_insecure_settings=true
 {{- end -}}
 {{- end -}}
 
@@ -123,8 +139,10 @@ Get prometheus-elasticsearch-exporter resources based on sizing profile
 Usage: {{ include "common.sizing.elasticsearch.prometheus-exporter.resources" . }}
 */}}
 {{- define "common.sizing.elasticsearch.prometheus-exporter.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") (eq $profile "20-nonha") (eq $profile "50-nonha") }}
 requests:
   cpu: "50m"
@@ -143,6 +161,5 @@ limits:
   cpu: "100m"
   memory: "100Mi"
   ephemeral-storage: "1Gi"
-{{- end }}
 {{- end }}
 {{- end }}

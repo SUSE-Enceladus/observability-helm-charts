@@ -1,6 +1,6 @@
 # opentelemetry-collector
 
-![Version: 0.108.0-stackstate.19](https://img.shields.io/badge/Version-0.108.0--stackstate.19-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.0.25](https://img.shields.io/badge/AppVersion-0.0.25-informational?style=flat-square)
+![Version: 0.108.0-stackstate.28](https://img.shields.io/badge/Version-0.108.0--stackstate.28-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.0.29](https://img.shields.io/badge/AppVersion-0.0.29-informational?style=flat-square)
 
 OpenTelemetry Collector Helm chart for Kubernetes
 
@@ -158,6 +158,17 @@ OpenTelemetry Collector Helm chart for Kubernetes
 | extraVolumeMounts | list | `[]` |  |
 | extraVolumes | list | `[]` |  |
 | fullnameOverride | string | `""` |  |
+| gateway | object | `{"additionalGateways":[],"annotations":{},"enabled":false,"filters":[],"hostnames":[],"kind":"HTTPRoute","parentRefs":[],"path":"/","pathType":"PathPrefix","timeouts":{}}` | Configure Kubernetes Gateway API routes for OpenTelemetry Collector. |
+| gateway.additionalGateways | list | `[]` | Additional gateway routes (e.g. for both HTTP and gRPC). |
+| gateway.annotations | object | `{}` | Annotations for the route resource. |
+| gateway.enabled | bool | `false` | Enable Gateway API routes for OpenTelemetry Collector. |
+| gateway.filters | list | `[]` | Optional filters for the route rule. |
+| gateway.hostnames | list | `[]` | List of hostnames for the route. |
+| gateway.kind | string | `"HTTPRoute"` | The type of Gateway API route to create. Valid values: "HTTPRoute" or "GRPCRoute". |
+| gateway.parentRefs | list | `[]` | List of parent Gateway references. |
+| gateway.path | string | `"/"` | Path prefix for HTTPRoute rules. |
+| gateway.pathType | string | `"PathPrefix"` | Path match type for HTTPRoute. |
+| gateway.timeouts | object | `{}` | Optional timeouts for HTTPRoute rules. |
 | global.commonLabels | object | `{}` |  |
 | global.features | object | `{"experimentalStackpacks":false}` | Feature switches for SUSE Observability. |
 | global.features.experimentalStackpacks | bool | `false` | Enable StackPacks 2.0 to signal to all components that they should support the StackPacks 2.0 spec. This is a preproduction feature, usage may break your entire installation with upcoming releases. No backwards compatibility is guaranteed. |
@@ -218,7 +229,7 @@ OpenTelemetry Collector Helm chart for Kubernetes
 | ports.otlp-http.hostPort | int | `4318` |  |
 | ports.otlp-http.protocol | string | `"TCP"` |  |
 | ports.otlp-http.servicePort | int | `4318` |  |
-| ports.otlp.appProtocol | string | `"grpc"` |  |
+| ports.otlp.appProtocol | string | `"kubernetes.io/h2c"` |  |
 | ports.otlp.containerPort | int | `4317` |  |
 | ports.otlp.enabled | bool | `true` |  |
 | ports.otlp.hostPort | int | `4317` |  |

@@ -5,6 +5,10 @@ global:
   backup:
     enabled: true
 
+ai:
+  assistant:
+    enabled: "true"
+
 stackstate:
   baseUrl: "http://localhost"
   license:
@@ -90,6 +94,11 @@ stackstate:
           router-mode-annotation: "router-value"
         podLabels:
           router-mode-label: "router-value"
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true
 clickhouse:
   backup:
     podAnnotations:

@@ -1,29 +1,23 @@
 # zookeeper
 
-![Version: 8.1.2-suse-observability.5](https://img.shields.io/badge/Version-8.1.2--suse--observability.5-informational?style=flat-square) ![AppVersion: 3.7.0](https://img.shields.io/badge/AppVersion-3.7.0-informational?style=flat-square)
-
+![Version: 8.1.2-suse-observability.24](https://img.shields.io/badge/Version-8.1.2--suse--observability.24-informational?style=flat-square) ![AppVersion: 3.7.0](https://img.shields.io/badge/AppVersion-3.7.0-informational?style=flat-square)
 Apache ZooKeeper provides a reliable, centralized register of configuration data and services for distributed applications.
-
 **Homepage:** <https://github.com/bitnami/charts/tree/master/bitnami/zookeeper>
-
 ## Maintainers
 
 | Name | Email | Url |
 | ---- | ------ | --- |
 | Bitnami | <containers@bitnami.com> |  |
-
 ## Source Code
 
 * <https://github.com/bitnami/bitnami-docker-zookeeper>
 * <https://zookeeper.apache.org/>
-
 ## Requirements
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://../suse-observability-sizing | suse-observability-sizing | 0.1.2 |
-| https://charts.bitnami.com/bitnami | common | 1.x.x |
-
+| file://../suse-observability-sizing | suse-observability-sizing | 0.1.16 |
+| file://charts/common | common | 1.x.x |
 ## Values
 
 | Key | Type | Default | Description |
@@ -36,22 +30,39 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | auth.existingSecret | string | `""` |  |
 | auth.serverPasswords | string | `""` |  |
 | auth.serverUsers | string | `""` |  |
-| autopurge.purgeInterval | int | `0` |  |
-| autopurge.snapRetainCount | int | `3` |  |
+| autopurge.purgeInterval | int | `3` |  |
+| autopurge.snapRetainCount | int | `5` |  |
 | clusterDomain | string | `"cluster.local"` |  |
 | command[0] | string | `"/scripts/setup.sh"` |  |
 | commonAnnotations | object | `{}` |  |
-| commonLabels | object | `{}` |  |
+| commonLabels."app.kubernetes.io/part-of" | string | `"suse-observability"` |  |
 | configuration | string | `""` |  |
 | containerPorts.client | int | `2181` |  |
 | containerPorts.election | int | `3888` |  |
 | containerPorts.follower | int | `2888` |  |
 | containerPorts.tls | int | `3181` |  |
+| containerSecurityContext.allowPrivilegeEscalation | bool | `false` |  |
+| containerSecurityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | containerSecurityContext.enabled | bool | `true` |  |
 | containerSecurityContext.runAsNonRoot | bool | `true` |  |
 | containerSecurityContext.runAsUser | int | `1001` |  |
-| customLivenessProbe | object | `{}` |  |
-| customReadinessProbe | object | `{}` |  |
+| containerSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
+| customLivenessProbe.exec.command[0] | string | `"/bin/bash"` |  |
+| customLivenessProbe.exec.command[1] | string | `"-c"` |  |
+| customLivenessProbe.exec.command[2] | string | `"echo \"ruok\" | timeout 2 nc -w 2 -q 1 localhost 2181 | grep imok"` |  |
+| customLivenessProbe.failureThreshold | int | `6` |  |
+| customLivenessProbe.initialDelaySeconds | int | `30` |  |
+| customLivenessProbe.periodSeconds | int | `10` |  |
+| customLivenessProbe.successThreshold | int | `1` |  |
+| customLivenessProbe.timeoutSeconds | int | `5` |  |
+| customReadinessProbe.exec.command[0] | string | `"/bin/bash"` |  |
+| customReadinessProbe.exec.command[1] | string | `"-c"` |  |
+| customReadinessProbe.exec.command[2] | string | `"echo \"ruok\" | timeout 2 nc -w 2 -q 1 localhost 2181 | grep imok"` |  |
+| customReadinessProbe.failureThreshold | int | `6` |  |
+| customReadinessProbe.initialDelaySeconds | int | `5` |  |
+| customReadinessProbe.periodSeconds | int | `10` |  |
+| customReadinessProbe.successThreshold | int | `1` |  |
+| customReadinessProbe.timeoutSeconds | int | `5` |  |
 | customStartupProbe | object | `{}` |  |
 | dataLogDir | string | `""` |  |
 | diagnosticMode.args[0] | string | `"infinity"` |  |
@@ -64,13 +75,13 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | extraEnvVarsSecret | string | `""` |  |
 | extraVolumeMounts | list | `[]` |  |
 | extraVolumes | list | `[]` |  |
-| fourlwCommandsWhitelist | string | `"srvr, mntr, ruok"` |  |
-| fullnameOverride | string | `""` |  |
+| fourlwCommandsWhitelist | string | `"mntr, ruok, stat, srvr"` |  |
+| fullnameOverride | string | `"suse-observability-zookeeper"` |  |
 | global.commonLabels | object | `{}` |  |
 | global.imagePullSecrets | list | `[]` |  |
 | global.imageRegistry | string | `""` |  |
 | global.storageClass | string | `""` |  |
-| heapSize | int | `1024` |  |
+| heapSize | int | `400` |  |
 | hostAliases | list | `[]` |  |
 | image.debug | bool | `false` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
@@ -80,11 +91,11 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | image.tag | string | `"3.7.0-debian-10-r320"` |  |
 | initContainers | list | `[]` |  |
 | initLimit | int | `10` |  |
-| jvmFlags | string | `""` |  |
+| jvmFlags | string | `"-Djute.maxbuffer=2097150"` |  |
 | kubeVersion | string | `""` |  |
 | lifecycleHooks | object | `{}` |  |
 | listenOnAllIPs | bool | `false` |  |
-| livenessProbe.enabled | bool | `true` |  |
+| livenessProbe.enabled | bool | `false` |  |
 | livenessProbe.failureThreshold | int | `6` |  |
 | livenessProbe.initialDelaySeconds | int | `30` |  |
 | livenessProbe.periodSeconds | int | `10` |  |
@@ -95,7 +106,7 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | maxClientCnxns | int | `60` |  |
 | maxSessionTimeout | int | `40000` |  |
 | metrics.containerPort | int | `9141` |  |
-| metrics.enabled | bool | `false` |  |
+| metrics.enabled | bool | `true` |  |
 | metrics.prometheusRule.additionalLabels | object | `{}` |  |
 | metrics.prometheusRule.enabled | bool | `false` |  |
 | metrics.prometheusRule.namespace | string | `""` |  |
@@ -124,7 +135,7 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | nodeAffinityPreset.type | string | `""` |  |
 | nodeAffinityPreset.values | list | `[]` |  |
 | nodeSelector | object | `{}` |  |
-| pdb.create | bool | `false` |  |
+| pdb.create | bool | `true` |  |
 | pdb.maxUnavailable | int | `1` |  |
 | pdb.minAvailable | string | `""` |  |
 | persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
@@ -135,18 +146,20 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | persistence.enabled | bool | `true` |  |
 | persistence.existingClaim | string | `""` |  |
 | persistence.selector | object | `{}` |  |
-| persistence.size | string | `"8Gi"` |  |
+| persistence.size | string | `nil` |  |
 | persistence.storageClass | string | `""` |  |
 | podAffinityPreset | string | `""` |  |
-| podAnnotations | object | `{}` |  |
+| podAnnotations."ad.stackstate.com/zookeeper.check_names" | string | `"[\"openmetrics\"]"` |  |
+| podAnnotations."ad.stackstate.com/zookeeper.init_configs" | string | `"[{}]"` |  |
+| podAnnotations."ad.stackstate.com/zookeeper.instances" | string | `"[ { \"prometheus_url\": \"http://%%host%%:9141/metrics\", \"namespace\": \"stackstate\", \"metrics\": [\"*\"] } ]"` |  |
 | podAntiAffinityPreset | string | `"soft"` |  |
-| podLabels | object | `{}` |  |
+| podLabels."app.kubernetes.io/part-of" | string | `"suse-observability"` |  |
 | podManagementPolicy | string | `"Parallel"` |  |
 | podSecurityContext.enabled | bool | `true` |  |
 | podSecurityContext.fsGroup | int | `1001` |  |
 | preAllocSize | int | `65536` |  |
 | priorityClassName | string | `""` |  |
-| readinessProbe.enabled | bool | `true` |  |
+| readinessProbe.enabled | bool | `false` |  |
 | readinessProbe.failureThreshold | int | `6` |  |
 | readinessProbe.initialDelaySeconds | int | `5` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
@@ -154,9 +167,7 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | readinessProbe.successThreshold | int | `1` |  |
 | readinessProbe.timeoutSeconds | int | `5` |  |
 | replicaCount | string | `nil` |  |
-| resources.limits | object | `{}` |  |
-| resources.requests.cpu | string | `"250m"` |  |
-| resources.requests.memory | string | `"256Mi"` |  |
+| resources | object | `{}` |  |
 | schedulerName | string | `""` |  |
 | service.annotations | object | `{}` |  |
 | service.clusterIP | string | `""` |  |
@@ -220,4 +231,3 @@ Apache ZooKeeper provides a reliable, centralized register of configuration data
 | volumePermissions.image.tag | string | `"10-debian-10-r367"` |  |
 | volumePermissions.resources.limits | object | `{}` |  |
 | volumePermissions.resources.requests | object | `{}` |  |
-

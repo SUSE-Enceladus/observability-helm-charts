@@ -1,0 +1,23 @@
+{{- define "stackstate.s3proxy.service" -}}
+metadata:
+  name: {{ include "stackstate.s3proxy.service.fullname" . }}
+  labels:
+    app.kubernetes.io/name: s3proxy
+    app.kubernetes.io/component: s3proxy
+    app.kubernetes.io/part-of: suse-observability
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ include "stackstate.s3proxy.port" . }}
+      targetPort: {{ include "stackstate.s3proxy.port" . }}
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: s3proxy
+    app.kubernetes.io/component: s3proxy
+{{- end -}}
+
+{{- $commonService := fromYaml (include "common.service" .) -}}
+{{- $s3proxyService := fromYaml (include "stackstate.s3proxy.service" .) -}}
+{{- toYaml (merge $s3proxyService $commonService) -}}

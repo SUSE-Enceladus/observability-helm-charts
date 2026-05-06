@@ -12,6 +12,10 @@ global:
 pull-secret:
   enabled: true
 
+ai:
+  assistant:
+    enabled: "true"
+
 stackstate:
   components:
     all:
@@ -36,6 +40,8 @@ stackstate:
   features:
     server:
       split: false
+  k8sAuthorization:
+    enabled: true
 hbase:
   version: "2.5"
   deployment:
@@ -44,3 +50,8 @@ anomaly-detection:
   enabled: true
 victoria-metrics-1:
   enabled: false
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true

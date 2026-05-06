@@ -2,16 +2,16 @@
 
 Helm chart for the SUSE observability Agent.
 
-Current chart version is `1.2.16`
+Current chart version is `1.2.46`
 
-**Homepage:** <https://github.com/StackVista/stackstate-agent>
+**Homepage:** <https://github.com/StackVista/suse-observability-agent>
 
 ## Requirements
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://helm.stackstate.io | httpHeaderInjectorWebhook(http-header-injector) | 0.0.22 |
-| https://helm.stackstate.io | kubernetes-rbac-agent | 0.0.23 |
+| file://../kubernetes-rbac-agent/ | kubernetes-rbac-agent | 0.0.27 |
+| https://helm.stackstate.io | httpHeaderInjectorWebhook(http-header-injector) | 0.0.25 |
 
 ## Required Values
 
@@ -30,7 +30,7 @@ helm install \
 --set-string 'stackstate.apiKey'='<your-api-key>' \
 --set-string 'stackstate.cluster.name'='<your-cluster-name>' \
 --set-string 'stackstate.url'='<your-stackstate-url>' \
-stackstate/stackstate-k8s-agent
+stackstate/suse-observability-agent
 ```
 
 ## Recommended Values
@@ -45,7 +45,7 @@ helm install \
 --set-string 'stackstate.cluster.name'='<your-cluster-name>' \
 --set-string 'stackstate.cluster.authToken'='<your-cluster-token>' \
 --set-string 'stackstate.url'='<your-stackstate-url>' \
-stackstate/stackstate-k8s-agent
+stackstate/suse-observability-agent
 ```
 
 ## Values
@@ -61,7 +61,7 @@ stackstate/stackstate-k8s-agent
 | checksAgent.enabled | bool | `true` | Enable / disable runnning cluster checks in a separately deployed pod |
 | checksAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | checksAgent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| checksAgent.image.tag | string | `"b85512ad"` | Default container image tag. |
+| checksAgent.image.tag | string | `"99695b1a"` | Default container image tag. |
 | checksAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | checksAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | checksAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -123,7 +123,7 @@ stackstate/stackstate-k8s-agent
 | clusterAgent.enabled | bool | `true` | Enable / disable the cluster agent. |
 | clusterAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | clusterAgent.image.repository | string | `"stackstate/stackstate-k8s-cluster-agent"` | Base container image repository. |
-| clusterAgent.image.tag | string | `"b85512ad"` | Default container image tag. |
+| clusterAgent.image.tag | string | `"99695b1a"` | Default container image tag. |
 | clusterAgent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | clusterAgent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | clusterAgent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -167,15 +167,17 @@ stackstate/stackstate-k8s-agent
 | global.proxy.url | string | `""` | Proxy for all traffic to stackstate |
 | global.skipSslValidation | bool | `false` | Enable tls validation from client |
 | httpHeaderInjectorWebhook.certificatePrehook.image.repository | string | `"stackstate/container-tools"` |  |
-| httpHeaderInjectorWebhook.certificatePrehook.image.tag | string | `"1.8.2-bci-517"` |  |
+| httpHeaderInjectorWebhook.certificatePrehook.image.tag | string | `"1.8.5-653"` |  |
 | httpHeaderInjectorWebhook.enabled | bool | `false` | Enable the webhook for injection http header injection sidecar proxy |
 | httpHeaderInjectorWebhook.proxy.image.repository | string | `"stackstate/http-header-injector-proxy"` |  |
 | httpHeaderInjectorWebhook.proxyInit.image.repository | string | `"stackstate/http-header-injector-proxy-init"` |  |
 | httpHeaderInjectorWebhook.sidecarInjector.image.repository | string | `"stackstate/generic-sidecar-injector"` |  |
+| httpHeaderInjectorWebhook.sidecarInjector.image.tag | string | `"638bbb3c-46-release"` |  |
 | kubernetes-rbac-agent.clusterName.fromConfigMap | string | `"{{ include \"stackstate-k8s-agent.clusterName.configmap.internal.name\" . }}"` |  |
 | kubernetes-rbac-agent.containers.rbacAgent.affinity | object | `{}` | Set affinity |
 | kubernetes-rbac-agent.containers.rbacAgent.env | object | `{}` | Additional environment variables |
 | kubernetes-rbac-agent.containers.rbacAgent.image.repository | string | `"stackstate/kubernetes-rbac-agent"` |  |
+| kubernetes-rbac-agent.containers.rbacAgent.image.tag | string | `"c96a7ba1-699-release"` |  |
 | kubernetes-rbac-agent.containers.rbacAgent.nodeSelector | object | `{}` | Set a nodeSelector |
 | kubernetes-rbac-agent.containers.rbacAgent.podAnnotations | object | `{}` | Additional annotations on the pod |
 | kubernetes-rbac-agent.containers.rbacAgent.podLabels | object | `{}` | Additional labels on the pod |
@@ -190,7 +192,7 @@ stackstate/stackstate-k8s-agent
 | logsAgent.enabled | bool | `true` | Enable / disable k8s pod log collection |
 | logsAgent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | logsAgent.image.repository | string | `"stackstate/promtail"` | Base container image repository. |
-| logsAgent.image.tag | string | `"2.9.15-b617a45b-105"` | Default container image tag. |
+| logsAgent.image.tag | string | `"3.6.10-f51a4334-release-135"` | Default container image tag. |
 | logsAgent.nodeSelector | object | `{}` | Node labels for pod assignment. |
 | logsAgent.priorityClassName | string | `""` | Priority class for logsAgent pods. |
 | logsAgent.resources.limits.cpu | string | `"1300m"` | CPU resource limits. |
@@ -212,7 +214,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.agent.env | object | `{}` | Additional environment variables for the agent container |
 | nodeAgent.containers.agent.image.pullPolicy | string | `"IfNotPresent"` | Default container image pull policy. |
 | nodeAgent.containers.agent.image.repository | string | `"stackstate/stackstate-k8s-agent"` | Base container image repository. |
-| nodeAgent.containers.agent.image.tag | string | `"b85512ad"` | Default container image tag. |
+| nodeAgent.containers.agent.image.tag | string | `"99695b1a"` | Default container image tag. |
 | nodeAgent.containers.agent.livenessProbe.enabled | bool | `true` | Enable use of livenessProbe check. |
 | nodeAgent.containers.agent.livenessProbe.failureThreshold | int | `3` | `failureThreshold` for the liveness probe. |
 | nodeAgent.containers.agent.livenessProbe.initialDelaySeconds | int | `15` | `initialDelaySeconds` for the liveness probe. |
@@ -235,7 +237,7 @@ stackstate/stackstate-k8s-agent
 | nodeAgent.containers.processAgent.image.pullPolicy | string | `"IfNotPresent"` | Process-agent container image pull policy. |
 | nodeAgent.containers.processAgent.image.registry | string | `nil` |  |
 | nodeAgent.containers.processAgent.image.repository | string | `"stackstate/stackstate-k8s-process-agent"` | Process-agent container image repository. |
-| nodeAgent.containers.processAgent.image.tag | string | `"5cba0f55"` | Default process-agent container image tag. |
+| nodeAgent.containers.processAgent.image.tag | string | `"4f8c0a0f"` | Default process-agent container image tag. |
 | nodeAgent.containers.processAgent.logLevel | string | `nil` | Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off # If not set, fall back to the value of agent.logLevel. |
 | nodeAgent.containers.processAgent.procVolumeReadOnly | bool | `true` | Configure whether /host/proc is read only for the process agent container |
 | nodeAgent.containers.processAgent.resources.limits.cpu | string | `"125m"` | CPU resource limits. |

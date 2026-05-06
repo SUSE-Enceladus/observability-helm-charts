@@ -1,0 +1,102 @@
+{{- /* Does not use common.job: complex Helm hook-based job with ArgoCD support */ -}}
+{{- if eq .Values.stackstate.components.router.mode.status "automatic" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- if .Values.deployment.compatibleWithArgoCD }}
+  generateName: set-maintenance-
+  {{- else }}
+  name: {{ template "common.fullname.short" . }}-set-maintenance-{{ now | date "02t150405" }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: router-mode
+    {{- include "common.labels.standard" . | nindent 4 }}
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+  annotations:
+    {{- if .Values.deployment.compatibleWithArgoCD }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    {{- else }}
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
+    {{- with .Values.stackstate.components.router.mode.jobAnnotations }}
+      {{- toYaml . | nindent 4}}
+    {{- end }}
+spec:
+  # Put a deadline so we do not wait indefinitely with this feature
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+    {{- if or .Values.stackstate.components.all.podAnnotations .Values.stackstate.components.router.mode.podAnnotations }}
+      annotations:
+      {{- with .Values.stackstate.components.all.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.router.mode.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+      labels:
+        app.kubernetes.io/component: router-mode
+        {{- include "common.labels.standard" . | nindent 8 }}
+        {{- include "suse-observability.labels.global" . | nindent 8 }}
+      {{- with .Values.stackstate.components.router.mode.podLabels }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: "{{ template "common.fullname.short" . }}-router-mode-scripts"
+      {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 6 }}
+      volumes:
+        - name: "{{ template "common.fullname.short" . }}-router-mode-scripts"
+          configMap:
+            name: "{{ template "common.fullname.short" . }}-router-mode-scripts"
+            defaultMode: 0777
+      containers:
+        - name: router-mode-maintenance
+          image: "{{ include "stackstate.router.mode.image.registry" . }}/{{ .Values.stackstate.components.router.mode.image.repository }}:{{ .Values.stackstate.components.router.mode.image.tag }}"
+          imagePullPolicy: {{ default .Values.stackstate.components.all.image.pullPolicy .Values.stackstate.components.router.mode.image.pullPolicy | quote }}
+          {{- with .Values.stackstate.components.router.mode.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: "{{ template "common.fullname.short" . }}-router-mode-scripts"
+              mountPath: /scripts
+              readOnly: true
+          command: [ "/scripts/set-maintenance.sh" ]
+      restartPolicy: Never
+  {{- if or .Values.stackstate.components.all.nodeSelector .Values.stackstate.components.router.mode.nodeSelector }}
+      nodeSelector:
+    {{- with .Values.stackstate.components.all.nodeSelector }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.router.mode.nodeSelector }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.stackstate.components.all.affinity .Values.stackstate.components.router.mode.affinity }}
+      affinity:
+    {{- with .Values.stackstate.components.all.affinity }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.router.mode.affinity }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.stackstate.components.all.tolerations .Values.stackstate.components.router.mode.tolerations }}
+      tolerations:
+    {{- with .Values.stackstate.components.all.tolerations }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.stackstate.components.router.mode.tolerations }}
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.stackstate.components.router.mode.securityContext.enabled }}
+      securityContext: {{- omit .Values.stackstate.components.router.mode.securityContext "enabled" | toYaml | nindent 8 }}
+  {{- end }}
+  backoffLimit: 0
+{{- end }}

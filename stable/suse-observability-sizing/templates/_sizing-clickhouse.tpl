@@ -8,10 +8,12 @@ Get clickhouse resources based on sizing profile
 Usage: {{ include "common.sizing.clickhouse.resources" . }}
 */}}
 {{- define "common.sizing.clickhouse.resources" -}}
-{{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
-{{- /* No profile-specific clickhouse resources for 500-ha */ -}}
-{{- end }}
+requests:
+  cpu: "500m"
+  memory: "4Gi"
+limits:
+  cpu: "1000m"
+  memory: "4Gi"
 {{- end }}
 
 {{/*
@@ -19,12 +21,14 @@ Get clickhouse persistence size based on sizing profile
 Usage: {{ include "common.sizing.clickhouse.persistence.size" . }}
 */}}
 {{- define "common.sizing.clickhouse.persistence.size" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}5Gi
 {{- else if or (eq $profile "10-nonha") (eq $profile "20-nonha") (eq $profile "50-nonha") (eq $profile "100-nonha") }}50Gi
 {{- else if eq $profile "150-ha" }}100Gi
-{{- end }}
+{{- else }}50Gi
 {{- end }}
 {{- end }}
 

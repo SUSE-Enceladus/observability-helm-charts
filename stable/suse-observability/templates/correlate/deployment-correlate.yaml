@@ -1,0 +1,185 @@
+{{- define "stackstate.correlate.name.postfix" -}}
+  {{- if .CorrelateType }}-{{ .CorrelateType }}{{ else }}{{ end }}
+{{- end -}}
+
+{{- define "stackstate.correlate.deployment.container.init" -}}
+name: correlate-init
+command:
+- sh
+- -c
+- |
+  /entrypoint -c {{ include "stackstate.kafka.endpoint" . }} -t 300
+image: "{{include "stackstate.wait.image.registry" .}}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
+{{- end -}}
+
+{{- define "stackstate.correlate.deployment.container.main" -}}
+{{- $componentConfigWithResources := .TypeConfig -}}
+env:
+{{- $serviceTypeConfig := merge (omit $componentConfigWithResources "split") .TypeConfig }}
+{{- $serviceConfig := dict "ServiceName" "correlate" "ServiceConfig" $serviceTypeConfig }}
+{{/* Build deployment-specific env vars that can be overridden via extraEnv */}}
+{{- $deploymentEnv := dict
+    "KAFKA_BROKERS" (include "stackstate.kafka.endpoint" .)
+    "CORRELATE_WRITE_STS_METRICS" "false"
+    "CORRELATE_WRITE_PROMETHEUS" "true"
+    "PROMETHEUS_WRITE_ENDPOINT" (printf "http://%s:8429/api/v1/write" (include "stackstate.vmagent.endpoint" .))
+}}
+{{- include "stackstate.service.envvars" (merge (dict "DeploymentEnv" $deploymentEnv) . $serviceConfig) }}
+{{- include "stackstate.component.envsFromExistingSecrets" .Values.stackstate.components.all.envsFromExistingSecrets }}
+{{- include "stackstate.component.envsFromExistingSecrets" .Values.stackstate.components.correlate.envsFromExistingSecrets }}
+image: "{{ include "stackstate.image.registry" (merge (dict) . $serviceConfig) }}/{{ .Values.stackstate.components.correlate.image.repository }}{{ .Values.stackstate.components.all.image.repositorySuffix }}:{{ default .Values.stackstate.components.all.image.tag .Values.stackstate.components.correlate.image.tag }}"
+imagePullPolicy: {{ default .Values.stackstate.components.all.image.pullPolicy .Values.stackstate.components.correlate.image.pullPolicy | quote }}
+livenessProbe:
+  httpGet:
+    path: /liveness
+    port: health
+  initialDelaySeconds: 60
+  timeoutSeconds: 5
+name: correlate{{ template "stackstate.correlate.name.postfix" . }}
+args:
+{{- include "stackstate.service.args" . }}
+volumeMounts:
+{{- include "stackstate.service.container.volumes" . }}
+ports:
+- containerPort: 1618
+  name: health
+- containerPort: 7070
+  name: correlate
+{{- if .Values.stackstate.components.all.metrics.enabled }}
+- containerPort: 9404
+  name: metrics
+{{- end }}
+readinessProbe:
+  httpGet:
+    path: /readiness
+    port: health
+  initialDelaySeconds: 10
+  timeoutSeconds: 5
+{{- with .TypeConfig.resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- define "stackstate.correlate.deployment" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+{{- $overrideMainContainer := fromYaml (include "stackstate.correlate.deployment.container.main" .) -}}
+{{- $stsstackstateCorrelateMainContainer := (merge $overrideMainContainer $commonContainer) -}}
+{{- $overrideInitContainer := fromYaml (include "stackstate.correlate.deployment.container.init" .) -}}
+{{- $stsstackstateCorrelateInitContainer := (merge $overrideInitContainer $commonContainer) -}}
+{{- $sizingReplicaCount := include "common.sizing.stackstate.correlate.replicaCount" . | trim -}}
+{{- $evaluatedReplicaCount := ternary .TypeConfig.replicaCount (default 1 $sizingReplicaCount | int) (not (kindIs "invalid" .TypeConfig.replicaCount)) -}}
+metadata:
+  name: {{ template "common.fullname.short" . }}-correlate{{ template "stackstate.correlate.name.postfix" . }}
+  labels:
+    app.kubernetes.io/component: correlate{{ template "stackstate.correlate.name.postfix" . }}
+    app.kubernetes.io/component-group: correlate
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+spec:
+  replicas: {{ $evaluatedReplicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: correlate{{ template "stackstate.correlate.name.postfix" . }}
+  strategy:
+{{- if eq (lower .Values.stackstate.components.all.deploymentStrategy.type) "recreatesingletonsonly" }}
+    type: RollingUpdate
+{{- else }}
+    {{- toYaml .Values.stackstate.components.all.deploymentStrategy | nindent 4 }}
+{{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- include "common.metrics.annotations" (dict "metrics" .Values.stackstate.components.all.metrics "port" "9404" "container_name" "correlate" "filter" .Values.stackstate.components.correlate.agentMetricsFilter) | indent 8 }}
+        {{- include "stackstate.common.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.license.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.correlate.secret.checksum" . | nindent 8 }}
+        {{- include "stackstate.correlate.configmap.checksum" . | nindent 8 }}
+        {{- include "stackstate.component.podExtraAnnotations" (merge (dict "Name" "correlate") .) }}
+        {{- with .TypeConfig.podAnnotations }}
+        {{- toYaml . | nindent 8}}
+        {{- end }}
+      labels:
+        app.kubernetes.io/component: correlate{{ template "stackstate.correlate.name.postfix" . }}
+        app.kubernetes.io/component-group: correlate
+        {{- include "suse-observability.labels.global" . | nindent 8 }}
+    spec:
+      {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 6 }}
+      initContainers:
+      - {{ toYaml $stsstackstateCorrelateInitContainer | nindent 8 }}
+      containers:
+      - {{ toYaml $stsstackstateCorrelateMainContainer | nindent 8 }}
+      volumes:
+        {{- include "stackstate.service.pod.volumes" (dict "pod_name" "correlate" "root" . ) | nindent 8 }}
+    {{- if or .Values.stackstate.components.all.nodeSelector (or .Values.stackstate.components.correlate.nodeSelector .TypeConfig.nodeSelector) }}
+      nodeSelector:
+      {{- with .Values.stackstate.components.all.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.correlate.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- $componentAffinity := .Values.stackstate.components.correlate.affinity }}
+    {{- if .TypeConfig.affinity }}
+      {{- $componentAffinity = .TypeConfig.affinity }}
+    {{- end }}
+    {{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" $componentAffinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) }}
+    {{- if $affinity }}
+      affinity:
+        {{- $affinity | nindent 8 }}
+    {{- end }}
+    {{- if or .Values.stackstate.components.all.tolerations (or .Values.stackstate.components.correlate.tolerations .TypeConfig.tolerations) }}
+      tolerations:
+      {{- with .Values.stackstate.components.all.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.correlate.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .TypeConfig.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.stackstate.components.all.securityContext.enabled }}
+      securityContext: {{- omit .Values.stackstate.components.all.securityContext "enabled" | toYaml | nindent 8 }}
+    {{- end }}
+{{- end -}}
+
+{{- $commonDeployment := fromYaml (include "common.deployment" .) -}}
+
+{{- if .Values.stackstate.components.correlate.split.enabled }}
+{{- $correlateConnectionArgs := merge (dict "CorrelateType" "connection" "TypeConfig" .Values.stackstate.components.correlate.split.connection) . -}}
+{{- $correlateConnectionDeployment := fromYaml (include "stackstate.correlate.deployment" $correlateConnectionArgs) -}}
+{{- toYaml (merge $correlateConnectionDeployment $commonDeployment) }}
+---
+{{- $correlateHTTPTracingArgs := merge (dict "CorrelateType" "http-tracing" "TypeConfig" .Values.stackstate.components.correlate.split.httpTracing) . -}}
+{{- $correlateHTTPTracingDeployment := fromYaml (include "stackstate.correlate.deployment" $correlateHTTPTracingArgs) -}}
+{{- toYaml (merge $correlateHTTPTracingDeployment $commonDeployment) }}
+---
+{{- $correlateAggregatorArgs := merge (dict "CorrelateType" "aggregator" "TypeConfig" .Values.stackstate.components.correlate.split.aggregator) . -}}
+{{- $correlateAggregatorDeployment := fromYaml (include "stackstate.correlate.deployment" $correlateAggregatorArgs) -}}
+{{ toYaml (merge $correlateAggregatorDeployment $commonDeployment) }}
+{{ else }}
+{{- $sizingResources := include "common.sizing.stackstate.correlate.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.stackstate.components.correlate.resources $sizingResourcesDict }}
+{{- $profileEnv := include "common.sizing.stackstate.correlate.env" . | trim -}}
+{{- $evaluatedExtraEnvOpen := .Values.stackstate.components.correlate.extraEnv.open }}
+{{- if $profileEnv }}
+{{- $profileEnvDict := fromYaml $profileEnv }}
+{{- $evaluatedExtraEnvOpen = merge (dict) $evaluatedExtraEnvOpen $profileEnvDict }}
+{{- else }}
+{{- if .Values.stackstate.components.correlate.extraEnv }}
+{{- if .Values.stackstate.components.correlate.extraEnv.open }}
+{{- $evaluatedExtraEnvOpen = merge (dict) .Values.stackstate.components.correlate.extraEnv.open $evaluatedExtraEnvOpen }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $evaluatedExtraEnv := dict "open" $evaluatedExtraEnvOpen "secret" .Values.stackstate.components.correlate.extraEnv.secret }}
+{{- $baseConfig := omit .Values.stackstate.components.correlate "resources" "extraEnv" }}
+{{- $evaluatedConfig := merge $baseConfig (dict "resources" $evaluatedResources "extraEnv" $evaluatedExtraEnv) }}
+{{- $correlateArgs := merge (dict "CorrelateType" "" "TypeConfig" $evaluatedConfig) . -}}
+{{- $correlateDeployment := fromYaml (include "stackstate.correlate.deployment" $correlateArgs) -}}
+{{- toYaml (merge $correlateDeployment $commonDeployment) }}
+{{- end }}

@@ -4,13 +4,13 @@ apiVersion: v2
 appVersion: 3.7.0
 dependencies:
   - name: common
-    repository: https://charts.bitnami.com/bitnami
+    repository: file://charts/common
     tags:
       - bitnami-common
     version: 1.x.x
   - name: suse-observability-sizing
     repository: file://../suse-observability-sizing
-    version: 0.1.3
+    version: 0.1.16
 description:
   Apache ZooKeeper provides a reliable, centralized register of configuration
   data and services for distributed applications.
@@ -25,4 +25,4 @@ name: zookeeper
 sources:
   - https://github.com/bitnami/bitnami-docker-zookeeper
   - https://zookeeper.apache.org/
-version: 8.1.2-suse-observability.6
+version: 8.1.2-suse-observability.24

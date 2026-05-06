@@ -697,6 +697,9 @@
                     },
                     "port": {
                       "type": "integer"
+                    },
+                    "serviceName": {
+                      "type": "string"
                     }
                   },
                   "required": ["path", "pathType", "port"]
@@ -767,6 +770,9 @@
                           },
                           "port": {
                             "type": "integer"
+                          },
+                          "serviceName": {
+                            "type": "string"
                           }
                         },
                         "required": ["path", "pathType", "port"]
@@ -800,6 +806,91 @@
         }
       },
       "required": ["enabled"]
+    },
+    "gateway": {
+      "type": "object",
+      "description": "Configure Kubernetes Gateway API routes for OpenTelemetry Collector.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["HTTPRoute", "GRPCRoute"]
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "parentRefs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "namespace": { "type": "string" },
+              "sectionName": { "type": "string" },
+              "port": { "type": "integer" }
+            },
+            "required": ["name"]
+          }
+        },
+        "hostnames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "path": {
+          "type": "string"
+        },
+        "pathType": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "filters": {
+          "type": "array"
+        },
+        "timeouts": {
+          "type": "object"
+        },
+        "backendWeight": {
+          "type": "integer"
+        },
+        "additionalGateways": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "kind": { "type": "string", "enum": ["HTTPRoute", "GRPCRoute"] },
+              "annotations": { "type": "object" },
+              "parentRefs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "namespace": { "type": "string" },
+                    "sectionName": { "type": "string" },
+                    "port": { "type": "integer" }
+                  },
+                  "required": ["name"]
+                }
+              },
+              "hostnames": { "type": "array", "items": { "type": "string" } },
+              "path": { "type": "string" },
+              "pathType": { "type": "string" },
+              "port": { "type": "integer" },
+              "filters": { "type": "array" },
+              "timeouts": { "type": "object" },
+              "backendWeight": { "type": "integer" }
+            },
+            "required": ["name"]
+          }
+        }
+      }
     },
     "podMonitor": {
       "type": "object",

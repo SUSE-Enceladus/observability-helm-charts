@@ -1,0 +1,218 @@
+global:
+  imageRegistry: "my.registry.com"
+  suseObservability:
+    receiverApiKey: "test-key"
+    pullSecret:
+      username: "test"
+      password: "secret"
+    sizing:
+      profile: "10-nonha"
+    license: "test-license-key"
+    baseUrl: "https://test.example.com"
+    adminPassword: "$2b$10$N9qo8uLOickgx2ZMRZoMye.IUIrCxGvz9/6pN.XMlqL9hzTgDaPGy"
+
+pull-secret:
+  enabled: false
+
+victoria-metrics-1:
+  enabled: false
+
+stackstate:
+  components:
+    all:
+      metricStore:
+        remoteWriteEndpoint: "test-$vmInstance:8148"
+        queryApiEndpoint: "test:8148"
+    server:
+
+      resources:
+        limits:
+          memory: "10Gi"
+          cpu: "6000m"
+        requests:
+          memory: "10Gi"
+          cpu: "3000m"
+      java:
+        trustStorePassword: "secretTrustStorePassword"
+    receiver:
+
+      resources:
+        limits:
+          memory: "2000Mi"
+          cpu: "4000m"
+        requests:
+          memory: "2000Mi"
+          cpu: "2000m"
+    correlate:
+
+      resources:
+        limits:
+          memory: "2500Mi"
+          cpu: "2000m"
+        requests:
+          memory: "2500Mi"
+          cpu: "1000m"
+    healthSync:
+
+      resources:
+        limits:
+          memory: "7000Mi"
+          cpu: "3000m"
+        requests:
+          memory: "7000Mi"
+          cpu: "1500m"
+    notification:
+
+      resources:
+        limits:
+          memory: "3000Mi"
+          cpu: "1500m"
+        requests:
+          memory: "3000Mi"
+          cpu: "750m"
+    sync:
+
+      resources:
+        limits:
+          memory: "16Gi"
+          cpu: "16000m"
+        requests:
+          memory: "16Gi"
+          cpu: "8000m"
+    ui:
+
+      resources:
+        limits:
+          memory: "128Mi"
+          cpu: "100m"
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+    initializer:
+
+      resources:
+        limits:
+          memory: "3000Mi"
+          cpu: "3000m"
+        requests:
+          memory: "3000Mi"
+          cpu: "1500m"
+    router:
+
+      resources:
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+    slicing:
+
+      resources:
+        limits:
+          memory: "4000Mi"
+          cpu: "3000m"
+        requests:
+          memory: "4000Mi"
+          cpu: "1500m"
+    e2es:
+
+      resources:
+        limits:
+          memory: "1024Mi"
+          cpu: "1000m"
+        requests:
+          memory: "1024Mi"
+          cpu: "500m"
+    authorizationSync:
+
+      resources:
+        limits:
+          memory: "2Gi"
+          cpu: "3000m"
+        requests:
+          memory: "2Gi"
+          cpu: "1500m"
+    vmagent:
+
+      resources:
+        limits:
+          memory: "1024Mi"
+          cpu: "400m"
+        requests:
+          memory: "1024Mi"
+          cpu: "200m"
+
+kafka:
+
+  resources:
+    limits:
+      memory: "4Gi"
+      cpu: "3200m"
+    requests:
+      memory: "4Gi"
+      cpu: "1600m"
+
+zookeeper:
+
+  resources:
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+
+elasticsearch:
+
+  resources:
+    limits:
+      memory: "5Gi"
+      cpu: "2000m"
+    requests:
+      memory: "5Gi"
+      cpu: "1000m"
+
+hbase:
+  stackgraph:
+
+    resources:
+      limits:
+        memory: "4500Mi"
+        cpu: "3000m"
+      requests:
+        memory: "4500Mi"
+        cpu: "1500m"
+  tephra:
+
+    resources:
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+
+victoria-metrics-0:
+  server:
+
+    resources:
+      limits:
+        memory: "3500Mi"
+        cpu: "2000m"
+      requests:
+        memory: "3500Mi"
+        cpu: "1000m"
+
+clickhouse:
+
+  resources:
+    limits:
+      memory: "8Gi"
+      cpu: "2000m"
+    requests:
+      memory: "8Gi"
+      cpu: "1000m"
+
+anomaly-detection:
+  enabled: false

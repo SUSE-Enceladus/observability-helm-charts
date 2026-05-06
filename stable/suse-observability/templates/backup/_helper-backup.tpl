@@ -1,0 +1,257 @@
+{{- /*
+  Backup naming constants — internal conventions, not user-configurable.
+*/ -}}
+{{- define "stackstate.backup.elasticsearch.indices" -}}sts*{{- end -}}
+{{- define "stackstate.backup.elasticsearch.snapshotRepositoryName" -}}sts-backup{{- end -}}
+{{- define "stackstate.backup.elasticsearch.snapshotPolicyName" -}}auto-sts-backup{{- end -}}
+{{- define "stackstate.backup.elasticsearch.snapshotNameTemplate" -}}<sts-backup-{now{yyyyMMdd-HHmm}}>{{- end -}}
+{{- define "stackstate.backup.stackGraph.backupNameTemplate" -}}sts-backup-$(date +%Y%m%d-%H%M).graph{{- end -}}
+{{- define "stackstate.backup.stackGraph.backupNameParseRegexp" -}}sts-backup-([0-9]*-[0-9]*).graph{{- end -}}
+{{- define "stackstate.backup.stackGraph.backupDatetimeParseFormat" -}}%Y%m%d-%H%M{{- end -}}
+{{- define "stackstate.backup.configuration.backupNameTemplate" -}}sts-backup-$(date +%Y%m%d-%H%M).sty{{- end -}}
+{{- define "stackstate.backup.configuration.backupNameParseRegexp" -}}sts-backup-([0-9]*-[0-9]*).sty{{- end -}}
+{{- define "stackstate.backup.configuration.backupDatetimeParseFormat" -}}%Y%m%d-%H%M{{- end -}}
+
+{{- /*
+  Adding a trailing slash to a value if it is not empty.
+*/ -}}
+{{- define "ensureTrailingSlashIfNotEmpty" -}}
+  {{- if . -}}
+    {{- printf "%s/" (. | trimSuffix "/") -}}
+  {{- else -}}
+    {{- "" -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /*
+  Removing trailing slashes if any from the string.
+*/ -}}
+{{- define "trimTrailingSlashes" -}}
+{{- . | trimSuffix "/" -}}
+{{- end -}}
+
+{{- /*
+  Stackpacks backup directory, this is used as a sub-directory inside the stackgraph and settings backup buckets.
+*/ -}}
+{{- define "stackstate.stackpacks.backup.dir" -}}
+stackpacks/
+{{- end -}}
+
+{{- define "stackstate.backup.envvars" -}}
+- name: BACKUP_STACKPACKS_SERVICE_URL
+  value: http://{{ template "common.fullname.short" . }}-backup-stackpacks:7090
+- name: BACKUP_ELASTICSEARCH_BUCKET_NAME
+  value: {{ .Values.backup.elasticsearch.bucketName | quote }}
+- name: BACKUP_ELASTICSEARCH_S3_PREFIX
+  value: {{ include "trimTrailingSlashes" .Values.backup.elasticsearch.s3Prefix | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_ENABLED
+  value: {{ .Values.backup.elasticsearch.scheduled.enabled | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SCHEDULED
+  value: {{ .Values.backup.elasticsearch.scheduled.schedule | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_INDICES
+  value: {{ include "stackstate.backup.elasticsearch.indices" . | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_REPOSITORY_NAME
+  value: {{ include "stackstate.backup.elasticsearch.snapshotRepositoryName" . | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_POLICY_NAME
+  value: {{ include "stackstate.backup.elasticsearch.snapshotPolicyName" . | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_NAME_TEMPLATE
+  value: {{ include "stackstate.backup.elasticsearch.snapshotNameTemplate" . | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_RETENTION_EXPIRE_AFTER
+  value: {{ .Values.backup.elasticsearch.scheduled.snapshotRetentionExpireAfter | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_RETENTION_MIN_COUNT
+  value: {{ .Values.backup.elasticsearch.scheduled.snapshotRetentionMinCount | quote }}
+- name: BACKUP_ELASTICSEARCH_SCHEDULED_SNAPSHOT_RETENTION_MAX_COUNT
+  value: {{ .Values.backup.elasticsearch.scheduled.snapshotRetentionMaxCount | quote }}
+- name: BACKUP_STACKGRAPH_BUCKET_NAME
+  value: {{ .Values.backup.stackGraph.bucketName | quote }}
+- name: BACKUP_STACKGRAPH_S3_PREFIX
+  value: {{ include "ensureTrailingSlashIfNotEmpty" .Values.backup.stackGraph.s3Prefix }}
+- name: BACKUP_STACKGRAPH_SCHEDULED_BACKUP_NAME_TEMPLATE
+  value: {{ include "stackstate.backup.stackGraph.backupNameTemplate" . | quote }}
+- name: BACKUP_STACKGRAPH_SCHEDULED_BACKUP_NAME_PARSE_REGEXP
+  value: {{ include "stackstate.backup.stackGraph.backupNameParseRegexp" . | quote }}
+- name: BACKUP_STACKGRAPH_SCHEDULED_BACKUP_DATETIME_PARSE_FORMAT
+  value: {{ include "stackstate.backup.stackGraph.backupDatetimeParseFormat" . | quote }}
+- name: BACKUP_STACKGRAPH_SCHEDULED_BACKUP_RETENTION_TIME_DELTA
+  value: {{ .Values.backup.stackGraph.scheduled.backupRetentionTimeDelta | quote }}
+- name: BACKUP_CONFIGURATION_UPLOAD_REMOTE
+  value: {{ .Values.global.backup.enabled | toString | lower | quote }}
+- name: BACKUP_CONFIGURATION_BUCKET_NAME
+  value: {{ .Values.backup.configuration.bucketName | quote }}
+- name: BACKUP_CONFIGURATION_S3_PREFIX
+  value: {{ include "ensureTrailingSlashIfNotEmpty" .Values.backup.configuration.s3Prefix }}
+- name: BACKUP_CONFIGURATION_SCHEDULED_ENABLED
+  value: {{ .Values.backup.configuration.scheduled.enabled | quote }}
+- name: BACKUP_CONFIGURATION_SCHEDULED_BACKUP_NAME_TEMPLATE
+  value: {{ include "stackstate.backup.configuration.backupNameTemplate" . | quote }}
+- name: BACKUP_CONFIGURATION_SCHEDULED_BACKUP_NAME_PARSE_REGEXP
+  value: {{ include "stackstate.backup.configuration.backupNameParseRegexp" . | quote }}
+- name: BACKUP_CONFIGURATION_SCHEDULED_BACKUP_DATETIME_PARSE_FORMAT
+  value: {{ include "stackstate.backup.configuration.backupDatetimeParseFormat" . | quote }}
+- name: BACKUP_CONFIGURATION_SCHEDULED_BACKUP_RETENTION_TIME_DELTA
+  value: {{ .Values.backup.configuration.scheduled.backupRetentionTimeDelta | quote }}
+- name: BACKUP_CONFIGURATION_MAX_LOCAL_FILES
+  value: {{ .Values.backup.configuration.maxLocalFiles | quote }}
+- name: BACKUP_STACKPACKS_DIR
+  value: {{ include "stackstate.stackpacks.backup.dir" . | quote }}
+- name: STACKSTATE_ROUTER_ENDPOINT
+  value: {{ include "stackstate.router.endpoint" . | quote }}
+- name: ELASTICSEARCH_ENDPOINT
+  value: {{ include "stackstate.es.endpoint" . | quote }}
+- name: BACKUP_VICTORIA_METRICS_0_ENABLED
+  value: {{ index .Values "victoria-metrics-0" "backup" "enabled" | quote }}
+- name: BACKUP_VICTORIA_METRICS_0_BUCKET_NAME
+  value: {{ index .Values "victoria-metrics-0" "backup" "bucketName" | quote }}
+- name: BACKUP_VICTORIA_METRICS_0_S3_PREFIX
+  value: {{ include "trimTrailingSlashes" (index .Values "victoria-metrics-0" "backup" "s3Prefix") }}
+- name: BACKUP_VICTORIA_METRICS_1_ENABLED
+  {{- $vm1Enabled := eq (include "victoria-metrics-1.effectivelyEnabled" .) "true" -}}
+  {{- $backupEnabled := and $vm1Enabled (index .Values "victoria-metrics-1" "backup" "enabled") }}
+  value: {{ $backupEnabled | quote }}
+- name: BACKUP_VICTORIA_METRICS_1_BUCKET_NAME
+  value: {{ index .Values "victoria-metrics-1" "backup" "bucketName" | quote }}
+- name: BACKUP_VICTORIA_METRICS_1_S3_PREFIX
+  value: {{ include "trimTrailingSlashes" (index .Values  "victoria-metrics-1" "backup" "s3Prefix") }}
+- name: BACKUP_CLICKHOUSE_BUCKET_NAME
+  value: {{ .Values.clickhouse.backup.bucketName | quote }}
+- name: BACKUP_CLICKHOUSE_S3_PREFIX
+  value: {{ include "ensureTrailingSlashIfNotEmpty" .Values.clickhouse.backup.s3Prefix }}
+- name: S3_ENDPOINT
+  value: {{ include "stackstate.s3proxy.endpoint" . | quote }}
+- name: S3_BUCKET_SETTINGS
+  value: {{ include "stackstate.s3proxy.localSettingsBucketName" . | quote }}
+{{- include "stackstate.env.platform_version" . }}
+{{- end -}}
+
+{{- define "stackstate.backup.volumeMounts" -}}
+- name: backup-log
+  mountPath: /opt/docker/etc_log
+- name: backup-restore-scripts
+  mountPath: /backup-restore-scripts
+- name: s3proxy-keys
+  mountPath: /aws-keys
+- name: config-volume
+  mountPath: /opt/docker/etc/application_stackstate.conf
+  subPath: application_stackstate.conf
+{{- end -}}
+
+{{- define "stackstate.backup.volumes" -}}
+- name: backup-log
+  configMap:
+    name: {{ template "common.fullname.short" . }}-backup-log
+- name: backup-restore-scripts
+  configMap:
+    name: {{ template "common.fullname.short" . }}-backup-restore-scripts
+    defaultMode: 0755
+- name: s3proxy-keys
+  secret:
+    secretName: {{ include "stackstate.minio.keys" . }}
+- name: config-volume
+  configMap:
+    name: {{ template "common.fullname.short" . }}-sts-backup-conf
+{{- end -}}
+
+{{- define "stackstate.backup.elasticsearch.restore.scaleDownLabels" -}}
+observability.suse.com/scalable-during-es-restore: "true"
+{{- end -}}
+
+{{- /*
+  Convert backup.elasticsearch.restore.scaleDownLabels to comma-separated list of key=value pairs.
+*/ -}}
+{{- define "stackstate.backup.elasticsearch.restore.scaleDownLabelsCommaSeparated" -}}
+observability.suse.com/scalable-during-es-restore=true
+{{- end -}}
+
+{{- /*
+  The labels of the Deployments that should be scaled down during Stackgraph restoring from the backup
+*/ -}}
+{{- define "stackstate.backup.stackgraph.restore.scaleDownLabelsCommaSeparated" -}}
+stackstate.com/connects-to-stackgraph=true
+{{- end -}}
+
+{{- /*
+  The labels of the Deployments that should be scaled down during Settings restoring from the backup. The same as for Stackgraph
+*/ -}}
+{{- define "stackstate.backup.configuration.restore.scaleDownLabelsCommaSeparated" -}}
+{{ include "stackstate.backup.stackgraph.restore.scaleDownLabelsCommaSeparated" . }}
+{{- end -}}
+
+{{- /*
+  The labels of the Statefulsets that should be scaled down during VictoriaMetrics restoring from the backup
+*/ -}}
+{{- define "stackstate.backup.victoriametrics.restore.scaleDownLabelsCommaSeparated" -}}
+observability.suse.com/scalable-during-vm-restore=true
+{{- end -}}
+
+{{- /*
+  The labels of the Statefulsets that should be scaled down during VictoriaMetrics restoring from the backup
+*/ -}}
+{{- define "stackstate.backup.clickhouse.restore.scaleDownLabelsCommaSeparated" -}}
+observability.suse.com/scalable-during-clickhouse-restore=true
+{{- end -}}
+
+{{- /*
+  Merge nodeSelector from stackstate.components.all and stackstate.components.backup.
+  backup.nodeSelector takes precedence over all.nodeSelector.
+
+  Usage:
+  {{- include "stackstate.backup.nodeSelector" . | nindent 8 }}
+*/ -}}
+{{- define "stackstate.backup.nodeSelector" -}}
+{{- $allNodeSelector := .Values.stackstate.components.all.nodeSelector | default dict -}}
+{{- $backupNodeSelector := .Values.stackstate.components.backup.nodeSelector | default dict -}}
+{{- $merged := merge $backupNodeSelector $allNodeSelector -}}
+{{- if $merged -}}
+nodeSelector:
+  {{- toYaml $merged | nindent 2 }}
+{{- end -}}
+{{- end -}}
+
+{{- /*
+  Merge affinity from stackstate.components.all and stackstate.components.backup.
+  backup.affinity takes precedence over all.affinity.
+
+  Usage:
+  {{- include "stackstate.backup.affinity" . | nindent 8 }}
+*/ -}}
+{{- define "stackstate.backup.affinity" -}}
+{{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" .Values.stackstate.components.backup.affinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) -}}
+  {{- if $affinity -}}
+affinity:
+  {{- $affinity | nindent 2 }}
+  {{- end }}
+{{- end -}}
+
+{{- /*
+  Concatenate tolerations from stackstate.components.all and stackstate.components.backup.
+  Both lists are combined (backup tolerations are appended after all tolerations).
+
+  Usage:
+  {{- include "stackstate.backup.tolerations" . | nindent 8 }}
+*/ -}}
+{{- define "stackstate.backup.tolerations" -}}
+{{- $allTolerations := .Values.stackstate.components.all.tolerations | default list -}}
+{{- $backupTolerations := .Values.stackstate.components.backup.tolerations | default list -}}
+{{- $merged := concat $allTolerations $backupTolerations -}}
+{{- if $merged -}}
+tolerations:
+  {{- toYaml $merged | nindent 2 }}
+{{- end -}}
+{{- end -}}
+
+{{- /*
+  Generate pod labels for backup components.
+  Includes app.kubernetes.io/component label, global labels, and custom podLabels.
+  backup.podLabels takes precedence over global labels.
+
+  Usage:
+  {{- include "stackstate.backup.podLabels" . | nindent 8 }}
+*/ -}}
+{{- define "stackstate.backup.podLabels" -}}
+{{- $globalLabels := include "suse-observability.labels.global" . | fromYaml | default dict -}}
+{{- $backupPodLabels := .Values.stackstate.components.backup.podLabels | default dict -}}
+{{- $merged := merge $backupPodLabels $globalLabels -}}
+{{- $merged = merge (dict "app.kubernetes.io/component" "backup") $merged -}}
+labels:
+  {{- toYaml $merged | nindent 2 }}
+{{- end -}}

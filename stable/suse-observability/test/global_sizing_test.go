@@ -3,16 +3,19 @@ package test
 import (
 	"testing"
 
+	"github.com/gruntwork-io/terratest/modules/helm"
+	"github.com/gruntwork-io/terratest/modules/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/StackVista/DevOps/helm-charts/helmtestutil"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // TestGlobalSizingProfilesRender tests that all 9 sizing profiles render successfully
 func TestGlobalSizingProfilesRender(t *testing.T) {
 	profiles := []struct {
-		name      string
+		name       string
 		valuesFile string
 	}{
 		{"trial", "values/global_sizing_trial.yaml"},
@@ -59,39 +62,39 @@ func TestGlobalSizingProfilesRender(t *testing.T) {
 // TestGlobalSizingReceiverSplitMode tests that receiver split mode is controlled by sizing profile
 func TestGlobalSizingReceiverSplitMode(t *testing.T) {
 	testCases := []struct {
-		name                  string
-		valuesFile            string
-		expectSplit           bool
-		expectedDeployments   []string
+		name                string
+		valuesFile          string
+		expectSplit         bool
+		expectedDeployments []string
 	}{
 		{
-			name:        "trial-no-split",
-			valuesFile:  "values/global_sizing_trial.yaml",
-			expectSplit: false,
+			name:                "trial-no-split",
+			valuesFile:          "values/global_sizing_trial.yaml",
+			expectSplit:         false,
 			expectedDeployments: []string{"suse-observability-receiver"},
 		},
 		{
-			name:        "10-nonha-no-split",
-			valuesFile:  "values/global_sizing_10_nonha.yaml",
-			expectSplit: false,
+			name:                "10-nonha-no-split",
+			valuesFile:          "values/global_sizing_10_nonha.yaml",
+			expectSplit:         false,
 			expectedDeployments: []string{"suse-observability-receiver"},
 		},
 		{
-			name:        "20-nonha-no-split",
-			valuesFile:  "values/global_sizing_20_nonha.yaml",
-			expectSplit: false,
+			name:                "20-nonha-no-split",
+			valuesFile:          "values/global_sizing_20_nonha.yaml",
+			expectSplit:         false,
 			expectedDeployments: []string{"suse-observability-receiver"},
 		},
 		{
-			name:        "50-nonha-no-split",
-			valuesFile:  "values/global_sizing_50_nonha.yaml",
-			expectSplit: false,
+			name:                "50-nonha-no-split",
+			valuesFile:          "values/global_sizing_50_nonha.yaml",
+			expectSplit:         false,
 			expectedDeployments: []string{"suse-observability-receiver"},
 		},
 		{
-			name:        "100-nonha-no-split",
-			valuesFile:  "values/global_sizing_100_nonha.yaml",
-			expectSplit: false,
+			name:                "100-nonha-no-split",
+			valuesFile:          "values/global_sizing_100_nonha.yaml",
+			expectSplit:         false,
 			expectedDeployments: []string{"suse-observability-receiver"},
 		},
 		{
@@ -165,9 +168,9 @@ func TestGlobalSizingReceiverSplitMode(t *testing.T) {
 // TestGlobalSizingVictoriaMetrics1Enablement tests victoria-metrics-1 conditional enablement
 func TestGlobalSizingVictoriaMetrics1Enablement(t *testing.T) {
 	testCases := []struct {
-		name                    string
-		valuesFile              string
-		expectVM1Enabled        bool
+		name             string
+		valuesFile       string
+		expectVM1Enabled bool
 	}{
 		{
 			name:             "trial-vm1-disabled",
@@ -246,11 +249,11 @@ func TestGlobalSizingVictoriaMetrics1Enablement(t *testing.T) {
 // TestGlobalSizingHbaseDeploymentMode tests hbase deployment mode (Mono vs Distributed)
 func TestGlobalSizingHbaseDeploymentMode(t *testing.T) {
 	testCases := []struct {
-		name                    string
-		valuesFile              string
-		expectMonoMode          bool
-		expectedStatefulSets    []string
-		unexpectedStatefulSets  []string
+		name                   string
+		valuesFile             string
+		expectMonoMode         bool
+		expectedStatefulSets   []string
+		unexpectedStatefulSets []string
 	}{
 		{
 			name:           "trial-mono-mode",
@@ -461,33 +464,33 @@ func TestGlobalSizingResourcesAreSet(t *testing.T) {
 // TestGlobalSizingReplicaCounts tests that replica counts are set correctly by sizing profiles
 func TestGlobalSizingReplicaCounts(t *testing.T) {
 	testCases := []struct {
-		name               string
-		valuesFile         string
-		componentName      string
+		name                string
+		valuesFile          string
+		componentName       string
 		expectedMinReplicas int32
 	}{
 		{
-			name:               "trial-kafka-single-replica",
-			valuesFile:         "values/global_sizing_trial.yaml",
-			componentName:      "suse-observability-kafka",
+			name:                "trial-kafka-single-replica",
+			valuesFile:          "values/global_sizing_trial.yaml",
+			componentName:       "suse-observability-kafka",
 			expectedMinReplicas: 1,
 		},
 		{
-			name:               "150-ha-kafka-multiple-replicas",
-			valuesFile:         "values/global_sizing_150_ha.yaml",
-			componentName:      "suse-observability-kafka",
+			name:                "150-ha-kafka-multiple-replicas",
+			valuesFile:          "values/global_sizing_150_ha.yaml",
+			componentName:       "suse-observability-kafka",
 			expectedMinReplicas: 3,
 		},
 		{
-			name:               "150-ha-elasticsearch-multiple-replicas",
-			valuesFile:         "values/global_sizing_150_ha.yaml",
-			componentName:      "suse-observability-elasticsearch-master",
+			name:                "150-ha-elasticsearch-multiple-replicas",
+			valuesFile:          "values/global_sizing_150_ha.yaml",
+			componentName:       "suse-observability-elasticsearch-master",
 			expectedMinReplicas: 3,
 		},
 		{
-			name:               "500-ha-correlate-multiple-replicas",
-			valuesFile:         "values/global_sizing_500_ha.yaml",
-			componentName:      "suse-observability-correlate",
+			name:                "500-ha-correlate-multiple-replicas",
+			valuesFile:          "values/global_sizing_500_ha.yaml",
+			componentName:       "suse-observability-correlate",
 			expectedMinReplicas: 3,
 		},
 	}
@@ -514,6 +517,272 @@ func TestGlobalSizingReplicaCounts(t *testing.T) {
 			}
 
 			t.Fatalf("Component %s not found in StatefulSets or Deployments", tc.componentName)
+		})
+	}
+}
+
+// TestGlobalSizingProfileWinsOverDefaults verifies that when a sizing profile is active,
+// profile resources are used directly (not merged with/overridden by values.yaml defaults).
+func TestGlobalSizingProfileWinsOverDefaults(t *testing.T) {
+	// Render 500-ha profile WITHOUT any resource overrides
+	output := helmtestutil.RenderHelmTemplate(t, "suse-observability", "values/global_sizing_500_ha.yaml")
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	// Check that Kafka resources are from profile, not from values.yaml defaults
+	t.Run("kafka-uses-profile-resources", func(t *testing.T) {
+		ss, exists := resources.Statefulsets["suse-observability-kafka"]
+		require.True(t, exists, "kafka StatefulSet should exist")
+		containers := ss.Spec.Template.Spec.Containers
+		require.NotEmpty(t, containers)
+
+		// Profile should set non-empty resources
+		memLimit := containers[0].Resources.Limits[corev1.ResourceMemory]
+		assert.True(t, memLimit.Value() > 0,
+			"kafka memory limit should be > 0 from profile, got %s", memLimit.String())
+	})
+
+	// Check that elasticsearch resources come from profile, not from subchart defaults
+	// Subchart default (elasticsearch/values.yaml) is 2Gi memory / 1000m CPU
+	// Profile should set something larger for 500-ha
+	t.Run("elasticsearch-uses-profile-resources", func(t *testing.T) {
+		ss, exists := resources.Statefulsets["suse-observability-elasticsearch-master"]
+		require.True(t, exists, "elasticsearch StatefulSet should exist")
+		containers := ss.Spec.Template.Spec.Containers
+		require.NotEmpty(t, containers)
+
+		// elasticsearch subchart default memory limit is 2Gi
+		// Profile should set it higher
+		memLimit := containers[0].Resources.Limits[corev1.ResourceMemory]
+		subchartDefaultMemLimit := resource.MustParse("2Gi")
+		assert.True(t, memLimit.Cmp(subchartDefaultMemLimit) > 0,
+			"elasticsearch memory limit should be greater than subchart default 2Gi, got %s", memLimit.String())
+	})
+
+	// Check that a stackstate component (correlate) gets profile resources
+	t.Run("correlate-uses-profile-resources", func(t *testing.T) {
+		dep, exists := resources.Deployments["suse-observability-correlate"]
+		require.True(t, exists, "correlate deployment should exist")
+		containers := dep.Spec.Template.Spec.Containers
+		require.NotEmpty(t, containers)
+
+		memLimit := containers[0].Resources.Limits[corev1.ResourceMemory]
+		assert.True(t, memLimit.Value() > 0,
+			"correlate memory limit should be > 0 from profile, got %s", memLimit.String())
+	})
+}
+
+// TestGlobalSizingUserStorageOverrides tests that user-specified storage overrides take precedence over sizing profile defaults
+func TestGlobalSizingUserStorageOverrides(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		valuesFile              string
+		expectedStorage         map[string]string // statefulset name -> expected storage size
+		expectedReplicas        map[string]int    // statefulset name -> expected replica count
+		expectedEsJavaOpts      string
+		expectedRetentionPeriod map[string]string // statefulset name -> expected retentionPeriod arg value
+	}{
+		{
+			name:       "150-ha with storage overrides",
+			valuesFile: "values/global_sizing_150_ha_storage_override.yaml",
+			expectedStorage: map[string]string{
+				"suse-observability-clickhouse-shard0":    "500Gi",
+				"suse-observability-elasticsearch-master": "400Gi",
+				"suse-observability-kafka":                "200Gi",
+				"suse-observability-zookeeper":            "16Gi",
+				"suse-observability-hbase-hdfs-dn":        "500Gi",
+				"suse-observability-victoria-metrics-0":   "500Gi",
+				"suse-observability-victoria-metrics-1":   "500Gi",
+			},
+			expectedReplicas: map[string]int{
+				"suse-observability-elasticsearch-master": 5,
+			},
+			expectedEsJavaOpts: "-Xmx8g -Xms8g -Des.allow_insecure_settings=true",
+			expectedRetentionPeriod: map[string]string{
+				"suse-observability-victoria-metrics-0": "6",
+				"suse-observability-victoria-metrics-1": "6",
+			},
+		},
+		{
+			name:       "10-nonha with storage overrides",
+			valuesFile: "values/global_sizing_10_nonha_storage_override.yaml",
+			expectedStorage: map[string]string{
+				"suse-observability-clickhouse-shard0":    "200Gi",
+				"suse-observability-elasticsearch-master": "100Gi",
+				"suse-observability-kafka":                "150Gi",
+				"suse-observability-zookeeper":            "20Gi",
+				"suse-observability-hbase-stackgraph":     "300Gi",
+				"suse-observability-victoria-metrics-0":   "100Gi",
+			},
+			expectedReplicas: map[string]int{
+				"suse-observability-elasticsearch-master": 5,
+			},
+			expectedEsJavaOpts: "-Xmx8g -Xms8g -Des.allow_insecure_settings=true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := helmtestutil.RenderHelmTemplate(t, "suse-observability", tc.valuesFile)
+			resources := helmtestutil.NewKubernetesResources(t, output)
+
+			// Verify storage sizes
+			for stsName, expectedSize := range tc.expectedStorage {
+				t.Run("storage-"+stsName, func(t *testing.T) {
+					ss, exists := resources.Statefulsets[stsName]
+					require.True(t, exists, "StatefulSet %s should exist", stsName)
+					require.NotEmpty(t, ss.Spec.VolumeClaimTemplates, "StatefulSet %s should have VolumeClaimTemplates", stsName)
+					storageReq := ss.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+					assert.Equal(t, resource.MustParse(expectedSize), storageReq,
+						"StatefulSet %s storage should be %s (user override)", stsName, expectedSize)
+				})
+			}
+
+			// Verify replica overrides
+			for stsName, expectedReplica := range tc.expectedReplicas {
+				t.Run("replicas-"+stsName, func(t *testing.T) {
+					ss, exists := resources.Statefulsets[stsName]
+					require.True(t, exists, "StatefulSet %s should exist", stsName)
+					assert.Equal(t, int32(expectedReplica), *ss.Spec.Replicas,
+						"StatefulSet %s replicas should be %d (user override)", stsName, expectedReplica)
+				})
+			}
+
+			// Verify esJavaOpts override
+			if tc.expectedEsJavaOpts != "" {
+				t.Run("esJavaOpts", func(t *testing.T) {
+					ss, exists := resources.Statefulsets["suse-observability-elasticsearch-master"]
+					require.True(t, exists, "Elasticsearch StatefulSet should exist")
+					containers := ss.Spec.Template.Spec.Containers
+					require.NotEmpty(t, containers)
+					found := false
+					for _, env := range containers[0].Env {
+						if env.Name == "ES_JAVA_OPTS" {
+							assert.Equal(t, tc.expectedEsJavaOpts, env.Value, "ES_JAVA_OPTS should match user override")
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "ES_JAVA_OPTS env var should be set")
+				})
+			}
+
+			// Verify retentionPeriod overrides
+			for stsName, expectedRetention := range tc.expectedRetentionPeriod {
+				t.Run("retentionPeriod-"+stsName, func(t *testing.T) {
+					ss, exists := resources.Statefulsets[stsName]
+					require.True(t, exists, "StatefulSet %s should exist", stsName)
+					containers := ss.Spec.Template.Spec.Containers
+					require.NotEmpty(t, containers, "StatefulSet %s should have containers", stsName)
+					expectedArg := "--retentionPeriod=" + expectedRetention
+					found := false
+					for _, arg := range containers[0].Args {
+						if arg == expectedArg {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found,
+						"StatefulSet %s should have arg %s (user override), got args: %v", stsName, expectedArg, containers[0].Args)
+				})
+			}
+		})
+	}
+}
+
+// TestGlobalSizingStorageDefaultsWithoutOverrides tests that sizing profile storage defaults are applied when no user overrides
+func TestGlobalSizingStorageDefaultsWithoutOverrides(t *testing.T) {
+	testCases := []struct {
+		name            string
+		valuesFile      string
+		expectedStorage map[string]string
+	}{
+		{
+			name:       "150-ha defaults",
+			valuesFile: "values/global_sizing_150_ha.yaml",
+			expectedStorage: map[string]string{
+				"suse-observability-clickhouse-shard0":    "100Gi",
+				"suse-observability-elasticsearch-master": "200Gi",
+				"suse-observability-kafka":                "100Gi",
+				"suse-observability-zookeeper":            "8Gi",
+				"suse-observability-hbase-hdfs-dn":        "250Gi",
+				"suse-observability-victoria-metrics-0":   "250Gi",
+				"suse-observability-victoria-metrics-1":   "250Gi",
+			},
+		},
+		{
+			name:       "10-nonha defaults",
+			valuesFile: "values/global_sizing_10_nonha.yaml",
+			expectedStorage: map[string]string{
+				"suse-observability-clickhouse-shard0":    "50Gi",
+				"suse-observability-elasticsearch-master": "50Gi",
+				"suse-observability-kafka":                "60Gi",
+				"suse-observability-zookeeper":            "8Gi",
+				"suse-observability-hbase-stackgraph":     "50Gi",
+				"suse-observability-victoria-metrics-0":   "50Gi",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := helmtestutil.RenderHelmTemplate(t, "suse-observability", tc.valuesFile)
+			resources := helmtestutil.NewKubernetesResources(t, output)
+
+			for stsName, expectedSize := range tc.expectedStorage {
+				t.Run("storage-"+stsName, func(t *testing.T) {
+					ss, exists := resources.Statefulsets[stsName]
+					require.True(t, exists, "StatefulSet %s should exist", stsName)
+					require.NotEmpty(t, ss.Spec.VolumeClaimTemplates, "StatefulSet %s should have VolumeClaimTemplates", stsName)
+					storageReq := ss.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+					assert.Equal(t, resource.MustParse(expectedSize), storageReq,
+						"StatefulSet %s storage should be %s (sizing profile default)", stsName, expectedSize)
+				})
+			}
+		})
+	}
+}
+
+// TestBackupPVCStorageWithSizingProfile tests that backup-stackgraph-tmp-data PVC gets a non-empty storage size from sizing profiles
+func TestBackupPVCStorageWithSizingProfile(t *testing.T) {
+	testCases := []struct {
+		name            string
+		valuesFile      string
+		expectedPVC     string
+		expectedStorage string
+	}{
+		{
+			name:            "150-ha distributed backup PVC defaults to hdfs datanode size",
+			valuesFile:      "values/global_sizing_150_ha.yaml",
+			expectedPVC:     "suse-observability-backup-stackgraph-tmp-data",
+			expectedStorage: "250Gi",
+		},
+		{
+			name:            "10-nonha mono backup PVC defaults to stackgraph size",
+			valuesFile:      "values/global_sizing_10_nonha.yaml",
+			expectedPVC:     "suse-observability-backup-stackgraph-tmp-data",
+			expectedStorage: "50Gi",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+				ValuesFiles: []string{tc.valuesFile},
+				SetValues: map[string]string{
+					"global.backup.enabled":              "true",
+					"backup.storage.backend.pvc.enabled": "true",
+				},
+				KubectlOptions: &k8s.KubectlOptions{
+					Namespace: "suse-observability",
+				},
+			})
+			resources := helmtestutil.NewKubernetesResources(t, output)
+
+			pvc, exists := resources.PersistentVolumeClaims[tc.expectedPVC]
+			require.True(t, exists, "PVC %s should exist", tc.expectedPVC)
+			storageReq := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+			assert.Equal(t, resource.MustParse(tc.expectedStorage), storageReq,
+				"PVC %s storage should be %s (sizing profile default)", tc.expectedPVC, tc.expectedStorage)
 		})
 	}
 }

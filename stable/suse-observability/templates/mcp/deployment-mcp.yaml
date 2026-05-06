@@ -1,0 +1,99 @@
+{{- define "stackstate.mcp.deployment.container.main" -}}
+{{- $serviceConfig := dict "ServiceName" "mcp" "ServiceConfig" .Values.stackstate.components.mcp }}
+{{- $stackstateService := ternary "api-headless" "server-headless" (eq (include "suse-observability.features.enabled" (dict "key" "server.split" "context" .) | trim) "true") }}
+{{- $stackstateUrl := printf "http://%s-%s:7070" (include "common.fullname.short" .) $stackstateService -}}
+{{- $mcpImageTag := .Values.stackstate.components.mcp.image.tag -}}
+{{- if .Values.ai.assistant.enabled -}}
+{{- $mcpImageTag = required "stackstate.components.mcp.image.tag must be set" .Values.stackstate.components.mcp.image.tag -}}
+{{- end -}}
+name: mcp
+image: "{{ include "stackstate.image.registry" (merge $serviceConfig .) }}/{{ .Values.stackstate.components.mcp.image.repository }}{{ .Values.stackstate.components.all.image.repositorySuffix }}:{{ $mcpImageTag }}"
+imagePullPolicy: {{ default .Values.stackstate.components.all.image.pullPolicy .Values.stackstate.components.mcp.image.pullPolicy | quote }}
+args:
+  - -url
+  - {{ $stackstateUrl | quote }}
+  - -http
+  - {{ include "stackstate.mcp.listenAddress" . | quote }}
+env:
+{{- include "stackstate.common.envvars" . }}
+{{- include "stackstate.mcp.envvars" . }}
+{{- include "stackstate.component.envsFromExistingSecrets" .Values.stackstate.components.all.envsFromExistingSecrets }}
+{{- include "stackstate.component.envsFromExistingSecrets" .Values.stackstate.components.mcp.envsFromExistingSecrets }}
+ports:
+  - containerPort: {{ include "stackstate.mcp.port" . }}
+    name: http
+    protocol: TCP
+{{- $sizingResources := include "common.sizing.stackstate.mcp.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.stackstate.components.mcp.resources $sizingResourcesDict }}
+{{- if $evaluatedResources }}
+resources:
+  {{- toYaml $evaluatedResources | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- define "stackstate.mcp.deployment" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+{{- $overrideContainer := fromYaml (include "stackstate.mcp.deployment.container.main" .) -}}
+{{- $mcpMainContainer := (merge $overrideContainer $commonContainer) -}}
+metadata:
+  name: {{ template "stackstate.mcp.fullname" . }}
+  labels:
+    app.kubernetes.io/component: mcp
+    {{- include "suse-observability.labels.global" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.stackstate.components.mcp.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mcp
+  strategy:
+{{- if eq (lower .Values.stackstate.components.all.deploymentStrategy.type) "recreatesingletonsonly" }}
+    type: RollingUpdate
+{{- else }}
+    {{- toYaml .Values.stackstate.components.all.deploymentStrategy | nindent 4 }}
+{{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- include "stackstate.component.podExtraAnnotations" (merge (dict "Name" "mcp") .) }}
+      labels:
+        app.kubernetes.io/component: mcp
+        {{- include "suse-observability.labels.global" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ template "stackstate.mcp.fullname" . }}
+      {{- include "stackstate.image.pullSecret.name" (dict "context" $) | nindent 6 }}
+      containers:
+      - {{ toYaml $mcpMainContainer | nindent 8 }}
+    {{- if or .Values.stackstate.components.all.nodeSelector .Values.stackstate.components.mcp.nodeSelector }}
+      nodeSelector:
+      {{- with .Values.stackstate.components.all.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.mcp.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- $affinity := include "suse-observability.global.affinity" (dict "componentAffinity" .Values.stackstate.components.mcp.affinity "allAffinity" .Values.stackstate.components.all.affinity "context" .) }}
+    {{- if $affinity }}
+      affinity:
+        {{- $affinity | nindent 8 }}
+    {{- end }}
+    {{- if or .Values.stackstate.components.all.tolerations .Values.stackstate.components.mcp.tolerations }}
+      tolerations:
+      {{- with .Values.stackstate.components.all.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.stackstate.components.mcp.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.stackstate.components.all.securityContext.enabled }}
+      securityContext: {{- omit .Values.stackstate.components.all.securityContext "enabled" | toYaml | nindent 8 }}
+    {{- end }}
+{{- end -}}
+
+{{- if .Values.ai.assistant.enabled }}
+{{- $commonDeployment := fromYaml (include "common.deployment" .) -}}
+{{- $mcpDeployment := fromYaml (include "stackstate.mcp.deployment" .) -}}
+{{- toYaml (merge $mcpDeployment $commonDeployment) -}}
+{{- end }}

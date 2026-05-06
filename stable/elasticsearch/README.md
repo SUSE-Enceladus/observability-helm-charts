@@ -1,6 +1,6 @@
 # elasticsearch
 
-![Version: 8.19.4-stackstate.5](https://img.shields.io/badge/Version-8.19.4--stackstate.5-informational?style=flat-square) ![AppVersion: 8.19.4](https://img.shields.io/badge/AppVersion-8.19.4-informational?style=flat-square)
+![Version: 8.19.4-stackstate.22](https://img.shields.io/badge/Version-8.19.4--stackstate.22-informational?style=flat-square) ![AppVersion: 8.19.4](https://img.shields.io/badge/AppVersion-8.19.4-informational?style=flat-square)
 Official Elastic helm chart for Elasticsearch
 **Homepage:** <https://github.com/elastic/helm-charts>
 ## Maintainers
@@ -15,23 +15,26 @@ Official Elastic helm chart for Elasticsearch
 
 | Repository | Name | Version |
 |------------|------|---------|
-| file://../prometheus-elasticsearch-exporter | prometheus-elasticsearch-exporter | 5.8.0-suse-observability.4 |
-| file://../suse-observability-sizing | suse-observability-sizing | 0.1.2 |
+| file://../prometheus-elasticsearch-exporter | prometheus-elasticsearch-exporter | 5.8.0-suse-observability.18 |
+| file://../suse-observability-sizing | suse-observability-sizing | 0.1.16 |
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | antiAffinity | string | `"hard"` |  |
 | antiAffinityTopologyKey | string | `"kubernetes.io/hostname"` |  |
-| clusterHealthCheckParams | string | `"local=true"` |  |
-| clusterName | string | `"elasticsearch"` |  |
-| commonLabels | object | `{}` |  |
+| clusterHealthCheckParams | string | `"wait_for_status=yellow&timeout=1s"` |  |
+| clusterName | string | `"suse-observability-elasticsearch"` |  |
+| commonLabels."app.kubernetes.io/part-of" | string | `"suse-observability"` |  |
 | createCert | bool | `false` |  |
 | esConfig | object | `{}` |  |
-| esJavaOpts | string | `"-Xmx1g -Xms1g"` |  |
+| esJavaOpts | string | `nil` |  |
 | esMajorVersion | string | `""` |  |
 | extraContainers | string | `""` |  |
-| extraEnvs | list | `[]` |  |
+| extraEnvs[0].name | string | `"action.auto_create_index"` |  |
+| extraEnvs[0].value | string | `"true"` |  |
+| extraEnvs[1].name | string | `"indices.query.bool.max_clause_count"` |  |
+| extraEnvs[1].value | string | `"10000"` |  |
 | extraInitContainers | string | `""` |  |
 | extraVolumeMounts | string | `""` |  |
 | extraVolumes | string | `""` |  |
@@ -83,12 +86,14 @@ Official Elastic helm chart for Elasticsearch
 | podSecurityPolicy.spec.volumes[1] | string | `"configMap"` |  |
 | podSecurityPolicy.spec.volumes[2] | string | `"persistentVolumeClaim"` |  |
 | priorityClassName | string | `""` |  |
-| prometheus-elasticsearch-exporter.enabled | bool | `false` | Enable to expose prometheus metrics |
-| prometheus-elasticsearch-exporter.es.uri | string | `"http://elasticsearch-master:9200"` | URI of Elasticsearch to monitor, override when changing clusterName or nodeGroup (format is <protocol>://<clusterName>-<nodegroup>:<httpPort>) |
+| prometheus-elasticsearch-exporter.enabled | bool | `true` | Enable to expose prometheus metrics |
+| prometheus-elasticsearch-exporter.es.uri | string | `"http://suse-observability-elasticsearch-master:9200"` | URI of Elasticsearch to monitor, override when changing clusterName or nodeGroup (format is <protocol>://<clusterName>-<nodegroup>:<httpPort>) |
 | prometheus-elasticsearch-exporter.image.registry | string | `"quay.io"` |  |
 | prometheus-elasticsearch-exporter.image.repository | string | `"stackstate/elasticsearch-exporter"` | Elastichsearch Prometheus exporter image repository |
 | prometheus-elasticsearch-exporter.image.tag | string | `"v1.8.0-d2aa61ab"` | Elastichsearch Prometheus exporter image tag |
-| prometheus-elasticsearch-exporter.podAnnotations | object | `{}` | custom annotations on the pod |
+| prometheus-elasticsearch-exporter.podAnnotations | object | `{"ad.stackstate.com/exporter.check_names":"[\"openmetrics\"]","ad.stackstate.com/exporter.init_configs":"[{}]","ad.stackstate.com/exporter.instances":"[ { \"prometheus_url\": \"http://%%host%%:9108/metrics\", \"namespace\": \"stackstate\", \"metrics\": [\"elasticsearch_indices_store_*\", \"elasticsearch_cluster_health_*\"] } ]"}` | custom annotations on the pod |
+| prometheus-elasticsearch-exporter.serviceMonitor.enabled | bool | `false` |  |
+| prometheus-elasticsearch-exporter.serviceMonitor.labels | object | `{}` |  |
 | prometheus-elasticsearch-exporter.servicemonitor.enabled | bool | `false` | enable to create a servicemonitor for prometheus operator |
 | protocol | string | `"http"` |  |
 | rbac.create | bool | `false` |  |
@@ -98,11 +103,8 @@ Official Elastic helm chart for Elasticsearch
 | readinessProbe.periodSeconds | int | `10` |  |
 | readinessProbe.successThreshold | int | `3` |  |
 | readinessProbe.timeoutSeconds | int | `5` |  |
-| replicas | int | `3` |  |
-| resources.limits.cpu | string | `"1000m"` |  |
-| resources.limits.memory | string | `"2Gi"` |  |
-| resources.requests.cpu | string | `"1000m"` |  |
-| resources.requests.memory | string | `"2Gi"` |  |
+| replicas | string | `nil` |  |
+| resources | object | `{}` |  |
 | roles[0] | string | `"master"` |  |
 | roles[1] | string | `"ingest"` |  |
 | roles[2] | string | `"data"` |  |
@@ -137,4 +139,4 @@ Official Elastic helm chart for Elasticsearch
 | transportPort | int | `9300` |  |
 | updateStrategy | string | `"RollingUpdate"` |  |
 | volumeClaimTemplate.accessModes[0] | string | `"ReadWriteOnce"` |  |
-| volumeClaimTemplate.resources.requests.storage | string | `"30Gi"` |  |
+| volumeClaimTemplate.resources.requests.storage | string | `nil` |  |

@@ -11,13 +11,26 @@ global:
       username: pullPassword
       password:  pullSecret
     adminPassword: password
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: test
+                  operator: In
+                  values:
+                    - "backup-config-full-global"
+            topologyKey: "kubernetes.io/hostname"
   wait:
     image:
       tag: "wait_image_test_tag"
 backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true
   stackGraph:
     s3Prefix: "stackgraph/"
-    splitArchiveSize: 5GB
     restore:
       tmpData:
         storageClass: "test-class"

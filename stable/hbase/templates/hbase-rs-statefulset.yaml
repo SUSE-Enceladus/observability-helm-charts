@@ -5,8 +5,8 @@ command:
 - -c
 - |
   /entrypoint -c {{ include "hbase.zookeeper.endpoint" . }}:2181,{{ template "common.fullname.short" . }}-hbase-master:16000 -t 300
-image: "{{ include "common.image.registry" (dict "image" .Values.wait.image "context" .) }}/{{ .Values.wait.image.repository }}:{{ .Values.wait.image.tag }}"
-imagePullPolicy: {{ .Values.wait.image.pullPolicy | quote }}
+image: "{{ include "common.image.registry" (dict "image" .Values.global.wait.image "context" .) }}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
 {{- end -}}
 
 {{- define "hbase.hbase.regionserver.container.main" -}}
@@ -30,12 +30,9 @@ env:
   value: $(POD_NAME).{{ template "common.fullname.short" . }}-hbase-rs.$(POD_NAMESPACE).svc.cluster.local
 - name: HBASE_CONF_hbase_master_hostname
   value: "{{ template "common.fullname.short" . }}-hbase-master"
-{{- $profileResources := include "common.sizing.hbase.regionserver.resources" . | trim -}}
-{{- $evaluatedResources := .Values.hbase.regionserver.resources }}
-{{- if $profileResources }}
-{{- $profileResourcesDict := fromYaml $profileResources }}
-{{- $evaluatedResources = merge $profileResourcesDict .Values.hbase.regionserver.resources }}
-{{- end }}
+{{- $sizingResources := include "common.sizing.hbase.regionserver.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.hbase.regionserver.resources $sizingResourcesDict }}
 {{- $regionserverWithResources := merge (dict "resources" $evaluatedResources) .Values.hbase.regionserver }}
 {{- $serviceConfig := dict "ServiceConfig" (merge $regionserverWithResources .Values.all) }}
 {{- include "hbase.service.envvars" $serviceConfig }}

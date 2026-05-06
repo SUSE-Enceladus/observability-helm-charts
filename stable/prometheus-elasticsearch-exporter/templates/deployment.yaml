@@ -140,14 +140,11 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- $sizingResources := include "common.sizing.elasticsearch.prometheus-exporter.resources" . | trim -}}
-          {{- if $sizingResources }}
+          {{- $sizingResourcesDict := fromYaml $sizingResources }}
+          {{- $evaluatedResources := merge (dict) .Values.resources $sizingResourcesDict }}
+          {{- with $evaluatedResources }}
           resources:
-            {{- $sizingResources | nindent 12 }}
-          {{- else }}
-          {{- with .Values.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+          {{- toYaml . | nindent 12 }}
           {{- end }}
           ports:
             - containerPort: {{ .Values.service.httpPort }}
@@ -197,9 +194,13 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
+      {{- $sizingAffinity := include "common.sizing.prometheus-elasticsearch-exporter.affinityConfig" . | fromYaml -}}
+      {{- $finalAffinity := .Values.affinity | default dict -}}
+      {{- if and (not .Values.affinity) $sizingAffinity -}}
+        {{- $finalAffinity = $sizingAffinity -}}
+      {{- end -}}
+      {{- if $finalAffinity }}
+      affinity: {{- include "common.tplvalues.render" (dict "value" $finalAffinity "context" $) | nindent 8 }}
       {{- end }}
       volumes:
         {{- if and .Values.es.ssl.enabled (eq .Values.es.ssl.useExistingSecrets false) }}

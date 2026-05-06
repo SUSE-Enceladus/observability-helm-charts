@@ -11,13 +11,14 @@ import (
 // expectedWorkloadsHA defines ALL expected workloads when in HA mode (from ha_workload file)
 var expectedWorkloadsHA = []string{
 	// Deployments
+	"Deployment/suse-observability-mcp",
 	"Deployment/suse-observability-anomaly-detection-spotlight-manager",
 	"Deployment/suse-observability-anomaly-detection-spotlight-worker",
 	"Deployment/suse-observability-prometheus-elasticsearch-exporter",
 	"Deployment/suse-observability-hbase-console",
 	"Deployment/suse-observability-kafkaup-operator-kafkaup",
 	"Deployment/suse-observability-rbac-agent",
-	"Deployment/suse-observability-minio",
+	"Deployment/suse-observability-s3proxy",
 	"Deployment/suse-observability-api",
 	"Deployment/suse-observability-authorization-sync",
 	"Deployment/suse-observability-checks",
@@ -26,7 +27,9 @@ var expectedWorkloadsHA = []string{
 	"Deployment/suse-observability-initializer",
 	"Deployment/suse-observability-e2es",
 	"Deployment/suse-observability-notification",
-	"Deployment/suse-observability-receiver",
+	"Deployment/suse-observability-receiver-base",
+	"Deployment/suse-observability-receiver-logs",
+	"Deployment/suse-observability-receiver-process-agent",
 	"Deployment/suse-observability-router",
 	"Deployment/suse-observability-slicing",
 	"Deployment/suse-observability-state",
@@ -35,8 +38,12 @@ var expectedWorkloadsHA = []string{
 	// StatefulSets
 	"StatefulSet/suse-observability-clickhouse-shard0",
 	"StatefulSet/suse-observability-elasticsearch-master",
-	"StatefulSet/suse-observability-hbase-stackgraph",
-	"StatefulSet/suse-observability-hbase-tephra-mono",
+	"StatefulSet/suse-observability-hbase-hbase-master",
+	"StatefulSet/suse-observability-hbase-hdfs-nn",
+	"StatefulSet/suse-observability-hbase-hbase-rs",
+	"StatefulSet/suse-observability-hbase-hdfs-dn",
+	"StatefulSet/suse-observability-hbase-hdfs-snn",
+	"StatefulSet/suse-observability-hbase-tephra",
 	"StatefulSet/suse-observability-kafka",
 	"StatefulSet/suse-observability-otel-collector",
 	"StatefulSet/suse-observability-victoria-metrics-0",
@@ -44,29 +51,31 @@ var expectedWorkloadsHA = []string{
 	"StatefulSet/suse-observability-zookeeper",
 	"StatefulSet/suse-observability-vmagent",
 	"StatefulSet/suse-observability-workload-observer",
+	"StatefulSet/suse-observability-ai-assistant",
 	// Jobs (dynamic names will be handled with pattern matching)
-	"Job/suse-observability-backup-conf-*",
 	"Job/suse-observability-backup-init-*",
 	"Job/suse-observability-topic-create-*",
 	"Job/suse-observability-ch-clean*",
+	"Job/suse-observability-init-pvc-*",
 	// CronJobs
 	"CronJob/suse-observability-backup-sg",
-	"CronJob/suse-observability-backup-conf",
 	"CronJob/suse-observability-backup-init",
 	"CronJob/suse-observability-clickhouse-incremental-backup",
 	"CronJob/suse-observability-clickhouse-full-backup",
+	"CronJob/suse-observability-backup-conf",
 }
 
 // expectedWorkloadsNonHA defines ALL expected workloads when in Non-HA mode (from nonha_workload file)
 var expectedWorkloadsNonHA = []string{
 	// Deployments
+	"Deployment/suse-observability-mcp",
 	"Deployment/suse-observability-anomaly-detection-spotlight-manager",
 	"Deployment/suse-observability-anomaly-detection-spotlight-worker",
 	"Deployment/suse-observability-prometheus-elasticsearch-exporter",
 	"Deployment/suse-observability-hbase-console",
 	"Deployment/suse-observability-kafkaup-operator-kafkaup",
 	"Deployment/suse-observability-rbac-agent",
-	"Deployment/suse-observability-minio",
+	"Deployment/suse-observability-s3proxy",
 	"Deployment/suse-observability-correlate",
 	"Deployment/suse-observability-e2es",
 	"Deployment/suse-observability-receiver",
@@ -84,17 +93,18 @@ var expectedWorkloadsNonHA = []string{
 	"StatefulSet/suse-observability-zookeeper",
 	"StatefulSet/suse-observability-vmagent",
 	"StatefulSet/suse-observability-workload-observer",
+	"StatefulSet/suse-observability-ai-assistant",
 	// Jobs (dynamic names will be handled with pattern matching)
-	"Job/suse-observability-backup-conf-*",
 	"Job/suse-observability-backup-init-*",
 	"Job/suse-observability-topic-create-*",
 	"Job/suse-observability-ch-clean*",
+	"Job/suse-observability-init-pvc-*",
 	// CronJobs
 	"CronJob/suse-observability-backup-sg",
-	"CronJob/suse-observability-backup-conf",
 	"CronJob/suse-observability-backup-init",
 	"CronJob/suse-observability-clickhouse-incremental-backup",
 	"CronJob/suse-observability-clickhouse-full-backup",
+	"CronJob/suse-observability-backup-conf",
 }
 
 func TestWorkloadHARendering(t *testing.T) {
@@ -107,6 +117,22 @@ func TestWorkloadHARendering(t *testing.T) {
 
 func TestWorkloadNonHARendering(t *testing.T) {
 	output := helmtestutil.RenderHelmTemplate(t, "suse-observability", "values/workload_nonha.yaml")
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	// Test that ONLY expected workloads are rendered (no more, no less)
+	testExactWorkloadsRendered(t, &resources, expectedWorkloadsNonHA, "Non-HA")
+}
+
+func TestWorkloadGlobalHARendering(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplate(t, "suse-observability", "values/workload_global_ha.yaml")
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	// Test that ONLY expected workloads are rendered (no more, no less)
+	testExactWorkloadsRendered(t, &resources, expectedWorkloadsHA, "HA")
+}
+
+func TestWorkloadGlobalNonHARendering(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplate(t, "suse-observability", "values/workload_global_nonha.yaml")
 	resources := helmtestutil.NewKubernetesResources(t, output)
 
 	// Test that ONLY expected workloads are rendered (no more, no less)

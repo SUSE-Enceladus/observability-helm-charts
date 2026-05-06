@@ -156,15 +156,14 @@ nodeAgent:
         # nodeAgent.containers.agent.image.repository -- Base container image repository.
         repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-agent
         # nodeAgent.containers.agent.image.tag -- Default container image tag.
-        tag: "b85512ad"
+        tag: "99695b1a"
         # nodeAgent.containers.agent.image.pullPolicy -- Default container image pull policy.
         pullPolicy: IfNotPresent
       # nodeAgent.containers.agent.env -- Additional environment variables for the agent container
       env: {}
       # nodeAgent.containers.agent.logLevel -- Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off
       ## If not set, fall back to the value of agent.logLevel.
-      logLevel:  # INFO
-
+      logLevel:
       resources:
         limits:
           # nodeAgent.containers.agent.resources.limits.cpu -- CPU resource limits.
@@ -210,15 +209,14 @@ nodeAgent:
         # nodeAgent.containers.processAgent.image.repository -- Process-agent container image repository.
         repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-process-agent
         # nodeAgent.containers.processAgent.image.tag -- Default process-agent container image tag.
-        tag: "5cba0f55"
+        tag: "4f8c0a0f"
         # nodeAgent.containers.processAgent.image.pullPolicy -- Process-agent container image pull policy.
         pullPolicy: IfNotPresent
       # nodeAgent.containers.processAgent.env -- Additional environment variables for the process-agent container
       env: {}
       # nodeAgent.containers.processAgent.logLevel -- Set logging verbosity, valid log levels are: trace, debug, info, warn, error, critical, and off
       ## If not set, fall back to the value of agent.logLevel.
-      logLevel:  # INFO
-
+      logLevel:
       # nodeAgent.containers.processAgent.procVolumeReadOnly -- Configure whether /host/proc is read only for the process agent container
       procVolumeReadOnly: true
 
@@ -444,7 +442,7 @@ clusterAgent:
     # clusterAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-cluster-agent
     # clusterAgent.image.tag -- Default container image tag.
-    tag: "b85512ad"
+    tag: "99695b1a"
     # clusterAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
@@ -534,7 +532,7 @@ logsAgent:
     # logsAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/promtail
     # logsAgent.image.tag -- Default container image tag.
-    tag: 2.9.15-b617a45b-105
+    tag: 3.6.10-f51a4334-release-135
     # logsAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
@@ -587,7 +585,7 @@ checksAgent:
     # checksAgent.image.repository -- Base container image repository.
     repository: 709825985650.dkr.ecr.us-east-1.amazonaws.com/suse/stackstate/stackstate-k8s-agent
     # checksAgent.image.tag -- Default container image tag.
-    tag: "b85512ad"
+    tag: "99695b1a"
     # checksAgent.image.pullPolicy -- Default container image pull policy.
     pullPolicy: IfNotPresent
 
@@ -684,6 +682,8 @@ httpHeaderInjectorWebhook:
     image:
       # sidecarInjector.image.repository - Repository for the docker image
       repository: "stackstate/generic-sidecar-injector"
+      # sidecarInjector.image.tag - Tag for the docker image
+      tag: 638bbb3c-46-release
 
   # certificatePrehook -- Helm prehook to setup/remove a certificate for the sidecarInjector mutationwebhook
   certificatePrehook:
@@ -691,7 +691,7 @@ httpHeaderInjectorWebhook:
       # certificatePrehook.image.repository - Repository for the docker image.
       repository: stackstate/container-tools
       # certificatePrehook.image.tag
-      tag: "1.8.2-bci-517"
+      tag: 1.8.5-653
 
 ########################
 # Rbac Agent variables #
@@ -703,9 +703,11 @@ kubernetes-rbac-agent:
   url:
     fromConfigMap: '{{ include "stackstate-k8s-agent.url.configmap.internal.name"
       . }}'
+
   clusterName:
     fromConfigMap: '{{ include "stackstate-k8s-agent.clusterName.configmap.internal.name"
       . }}'
+
   roleType: 'scope'
   containers:
     rbacAgent:
@@ -717,7 +719,7 @@ kubernetes-rbac-agent:
         # kubernetes-rbac-agent.containers.rbacAgent.image.pullPolicy -- Policy when pulling an image
         # pullPolicy:
         # kubernetes-rbac-agent.containers.rbacAgent.image.tag -- The tag for the docker image
-        # tag:
+        tag: c96a7ba1-699-release
       resources:
         requests:
           # kubernetes-rbac-agent.containers.rbacAgent.resources.requests.memory -- Memory resource requests.

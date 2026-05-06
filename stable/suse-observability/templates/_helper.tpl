@@ -19,6 +19,42 @@ Parameters:
 {{- end -}}
 
 {{/*
+Internal constants — values that are fixed by the application and not user-configurable.
+*/}}
+{{- define "stackstate.mcp.port" -}}8080{{- end -}}
+{{- define "stackstate.mcp.listenAddress" -}}:{{ include "stackstate.mcp.port" . }}{{- end -}}
+{{- define "stackstate.aiAssistant.port" -}}8081{{- end -}}
+{{- define "stackstate.cache.backend" -}}mapdb{{- end -}}
+{{- define "stackstate.metricStore.remoteWritePath" -}}/api/v1/write{{- end -}}
+{{- define "stackstate.metrics.defaultAgentMetricsFilter" -}}["kafka_consumer_consumer_fetch_manager_metrics*", "kafka_producer_producer_topic_metrics*", "jvm*", "akka_http_requests_active", "stackstate*", "receiver*", "stackgraph*", "caffeine*"]{{- end -}}
+{{- define "stackstate.vmagent.agentMetricsFilter" -}}["vm*", "go*"]{{- end -}}
+{{- define "stackstate.vmagent.fullname" -}}suse-observability-vmagent{{- end -}}
+{{- define "stackstate.kafka.fullname" -}}suse-observability-kafka{{- end -}}
+{{- define "stackstate.zookeeper.fullname" -}}suse-observability-zookeeper{{- end -}}
+{{- define "stackstate.elasticsearch.fullname" -}}suse-observability-elasticsearch{{- end -}}
+{{- define "stackstate.clickhouse.fullname" -}}suse-observability-clickhouse{{- end -}}
+{{- define "stackstate.backup.clickhouse.backup.service" -}}suse-observability-clickhouse-backup{{- end -}}
+{{- define "stackstate.kafka.topicRetention" -}}86400000{{- end -}}
+{{- define "stackstate.kafka.topic.stsMetricsV2.partitionCount" -}}10{{- end -}}
+
+{{/*
+Build the full ClickHouse connection config dict, merging constants with user-configurable values.
+Returns a JSON string suitable for HOCON config rendering.
+*/}}
+{{- define "stackstate.clickhouse.config" -}}
+{{- $config := dict
+    "hostnames" .Values.stackstate.components.all.clickHouse.hostnames
+    "port" 8123
+    "database" "otel"
+    "username" "stackstate"
+    "password" ""
+    "protocol" "http"
+    "parameters" (dict "health_check_interval" "5000")
+-}}
+{{- $config | toPrettyJson -}}
+{{- end -}}
+
+{{/*
 Return the image registry
 */}}
 {{- define "stackstate.image.registry" -}}
@@ -141,10 +177,66 @@ Router extra environment variables for ui pods inherited through `stackstate.com
 {{- end -}}
 
 {{/*
+MCP fullname helper
+*/}}
+{{- define "stackstate.mcp.fullname" -}}
+suse-observability-mcp
+{{- end -}}
+
+{{/*
+MCP extra environment variables for mcp pods inherited through `stackstate.components.mcp.extraEnv`
+*/}}
+{{- define "stackstate.mcp.envvars" -}}
+{{- if .Values.stackstate.components.mcp.extraEnv.open }}
+  {{- range $key, $value := .Values.stackstate.components.mcp.extraEnv.open  }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.stackstate.components.mcp.extraEnv.secret }}
+  {{- range $key, $value := .Values.stackstate.components.mcp.extraEnv.secret  }}
+- name: {{ $key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "stackstate.mcp.fullname" $ }}
+      key: {{ $key }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+AI Assistant fullname helper
+*/}}
+{{- define "stackstate.ai-assistant.fullname" -}}
+suse-observability-ai-assistant
+{{- end -}}
+
+{{/*
+AI Assistant extra environment variables for ai-assistant pods inherited through `stackstate.components.aiAssistant.extraEnv`
+*/}}
+{{- define "stackstate.ai-assistant.envvars" -}}
+{{- if .Values.stackstate.components.aiAssistant.extraEnv.open }}
+  {{- range $key, $value := .Values.stackstate.components.aiAssistant.extraEnv.open  }}
+- name: {{ $key }}
+  value: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.stackstate.components.aiAssistant.extraEnv.secret }}
+  {{- range $key, $value := .Values.stackstate.components.aiAssistant.extraEnv.secret  }}
+- name: {{ $key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "stackstate.ai-assistant.fullname" $ }}
+      key: {{ $key }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Environment variables containing the properly sanitized StackState Base URLs
 */}}
 {{- define "stackstate.baseurls.envvars" }}
-{{- $baseUrl := include "suse-observability.global.baseUrl" . | default .Values.stackstate.baseUrl | default .Values.stackstate.receiver.baseUrl | trimSuffix "/" | required "stackstate.baseUrl or global.suseObservability.baseUrl is required" }}
+{{- $baseUrl := include "suse-observability.global.baseUrl" . | default .Values.stackstate.baseUrl | default .Values.stackstate.receiver.baseUrl | toString | trimSuffix "/" | required "stackstate.baseUrl or global.suseObservability.baseUrl is required" }}
 - name: STACKSTATE_BASE_URL
   value: {{ $baseUrl | quote }}
 - name: RECEIVER_BASE_URL
@@ -180,13 +272,22 @@ UI extra environment variables for ui pods inherited through `stackstate.compone
 {{- end }}
 {{- end -}}
 
+{{/*
+AI Assistant secret checksum annotations
+*/}}
+{{- define "stackstate.ai-assistant.secret.checksum" -}}
+{{- if or .Values.stackstate.components.aiAssistant.extraEnv.secret (and .Values.ai.assistant.enabled (eq (default "bedrock" .Values.ai.assistant.provider | lower) "anthropic") .Values.ai.assistant.anthropic.apiKey (not .Values.ai.assistant.anthropic.fromExternalSecret.name)) }}
+checksum/ai-assistant-env: {{ include (print $.Template.BasePath "/ai-assistant/secret-ai-assistant.yaml") . | sha256sum }}
+{{- end }}
+{{- end -}}
+
 
 {{/*
 Common secret checksum annotations
 */}}
 {{- define "stackstate.common.secret.checksum" -}}
 {{- if .Values.stackstate.components.all.extraEnv.secret }}
-checksum/common-env: {{ include (print $.Template.BasePath "/secret-common.yaml") . | sha256sum }}
+checksum/common-env: {{ include (print $.Template.BasePath "/global/secret-common.yaml") . | sha256sum }}
 {{- end }}
 {{- end -}}
 
@@ -194,7 +295,7 @@ checksum/common-env: {{ include (print $.Template.BasePath "/secret-common.yaml"
 Authorization Service secret checksum annotations
 */}}
 {{- define "stackstate.authorizationSync.secret.checksum" -}}
-checksum/authorizationSync-env: {{ include (print $.Template.BasePath "/secret-authorizationSync.yaml") . | sha256sum }}
+checksum/authorizationSync-env: {{ include (print $.Template.BasePath "/authorizationSync/secret-authorizationSync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
@@ -202,7 +303,7 @@ Correlate secret checksum annotations
 */}}
 {{- define "stackstate.correlate.secret.checksum" -}}
 {{- if .Values.stackstate.components.correlate.extraEnv.secret }}
-checksum/correlate-env: {{ include (print $.Template.BasePath "/secret-correlate.yaml") . | sha256sum }}
+checksum/correlate-env: {{ include (print $.Template.BasePath "/correlate/secret-correlate.yaml") . | sha256sum }}
 {{- end }}
 {{- end -}}
 
@@ -211,7 +312,7 @@ E2ES secret checksum annotations
 */}}
 {{- define "stackstate.e2es.secret.checksum" -}}
 {{- if .Values.stackstate.components.e2es.extraEnv.secret }}
-checksum/e2es-env: {{ include (print $.Template.BasePath "/secret-e2es.yaml") . | sha256sum }}
+checksum/e2es-env: {{ include (print $.Template.BasePath "/e2es/secret-e2es.yaml") . | sha256sum }}
 {{- end }}
 {{- end -}}
 
@@ -219,105 +320,105 @@ checksum/e2es-env: {{ include (print $.Template.BasePath "/secret-e2es.yaml") . 
 Receiver secret checksum annotations
 */}}
 {{- define "stackstate.receiver.secret.checksum" -}}
-checksum/receiver-env: {{ include (print $.Template.BasePath "/secret-receiver.yaml") . | sha256sum }}
+checksum/receiver-env: {{ include (print $.Template.BasePath "/receiver/secret-receiver.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Api secret checksum annotations
 */}}
 {{- define "stackstate.api.secret.checksum" -}}
-checksum/api-env: {{ include (print $.Template.BasePath "/secret-api.yaml") . | sha256sum }}
+checksum/api-env: {{ include (print $.Template.BasePath "/api/secret-api.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Checks secret checksum annotations
 */}}
 {{- define "stackstate.checks.secret.checksum" -}}
-checksum/checks-env: {{ include (print $.Template.BasePath "/secret-checks.yaml") . | sha256sum }}
+checksum/checks-env: {{ include (print $.Template.BasePath "/checks/secret-checks.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 License secret checksum annotations
 */}}
 {{- define "stackstate.license.secret.checksum" -}}
-checksum/license-env: {{ include (print $.Template.BasePath "/secret-license-key.yaml") . | sha256sum }}
+checksum/license-env: {{ include (print $.Template.BasePath "/global/secret-license-key.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
-License secret checksum annotations
+Apikey secret checksum annotations
 */}}
 {{- define "stackstate.apiKey.secret.checksum" -}}
-checksum/api-key-env: {{ include (print $.Template.BasePath "/secret-api-key.yaml") . | sha256sum }}
+checksum/api-key-env: {{ include (print $.Template.BasePath "/global/secret-api-key.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
-License secret checksum annotations
+Auth secret checksum annotations
 */}}
 {{- define "stackstate.auth.secret.checksum" -}}
-checksum/auth-env: {{ include (print $.Template.BasePath "/secret-auth.yaml") . | sha256sum }}
+checksum/auth-env: {{ include (print $.Template.BasePath "/global/secret-auth.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Email secret checksum annotations
 */}}
 {{- define "stackstate.email.secret.checksum" -}}
-checksum/auth-env: {{ include (print $.Template.BasePath "/secret-email.yaml") . | sha256sum }}
+checksum/email-env: {{ include (print $.Template.BasePath "/global/secret-email.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Initializer secret checksum annotations
 */}}
 {{- define "stackstate.initializer.secret.checksum" -}}
-checksum/initializer-env: {{ include (print $.Template.BasePath "/secret-initializer.yaml") . | sha256sum }}
+checksum/initializer-env: {{ include (print $.Template.BasePath "/initializer/secret-initializer.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Sync secret checksum annotations
 */}}
 {{- define "stackstate.sync.secret.checksum" -}}
-checksum/sync-env: {{ include (print $.Template.BasePath "/secret-sync.yaml") . | sha256sum }}
+checksum/sync-env: {{ include (print $.Template.BasePath "/sync/secret-sync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Slicing secret checksum annotations
 */}}
 {{- define "stackstate.slicing.secret.checksum" -}}
-checksum/slicing-env: {{ include (print $.Template.BasePath "/secret-slicing.yaml") . | sha256sum }}
+checksum/slicing-env: {{ include (print $.Template.BasePath "/slicing/secret-slicing.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 State secret checksum annotations
 */}}
 {{- define "stackstate.state.secret.checksum" -}}
-checksum/state-env: {{ include (print $.Template.BasePath "/secret-state.yaml") . | sha256sum }}
+checksum/state-env: {{ include (print $.Template.BasePath "/state/secret-state.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Server secret checksum annotations
 */}}
 {{- define "stackstate.server.secret.checksum" -}}
-checksum/server-env: {{ include (print $.Template.BasePath "/secret-server.yaml") . | sha256sum }}
+checksum/server-env: {{ include (print $.Template.BasePath "/server/secret-server.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 UI secret checksum annotations
 */}}
 {{- define "stackstate.ui.secret.checksum" -}}
-checksum/ui-env: {{ include (print $.Template.BasePath "/secret-ui.yaml") . | sha256sum }}
+checksum/ui-env: {{ include (print $.Template.BasePath "/ui/secret-ui.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 HealthSync secret checksum annotations
 */}}
 {{- define "stackstate.healthSync.secret.checksum" -}}
-checksum/healthSync-env: {{ include (print $.Template.BasePath "/secret-healthSync.yaml") . | sha256sum }}
+checksum/healthSync-env: {{ include (print $.Template.BasePath "/healthSync/secret-healthSync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Notification secret checksum annotations
 */}}
 {{- define "stackstate.notification.secret.checksum" -}}
-checksum/notification-env: {{ include (print $.Template.BasePath "/secret-notification.yaml") . | sha256sum }}
+checksum/notification-env: {{ include (print $.Template.BasePath "/notification/secret-notification.yaml") . | sha256sum }}
 {{- end -}}
 
 
@@ -325,98 +426,98 @@ checksum/notification-env: {{ include (print $.Template.BasePath "/secret-notifi
 Router configmap checksum annotations
 */}}
 {{- define "stackstate.router.configmap.checksum" -}}
-checksum/router-configmap: {{ include (print $.Template.BasePath "/configmap-router.yaml") . | sha256sum }}
+checksum/router-configmap: {{ include (print $.Template.BasePath "/router/configmap-router.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Server configmap checksum annotations
 */}}
 {{- define "stackstate.server.configmap.checksum" -}}
-checksum/server-configmap: {{ include (print $.Template.BasePath "/configmap-server.yaml") . | sha256sum }}
+checksum/server-configmap: {{ include (print $.Template.BasePath "/server/configmap-server.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Api configmap checksum annotations
 */}}
 {{- define "stackstate.api.configmap.checksum" -}}
-checksum/api-configmap: {{ include (print $.Template.BasePath "/configmap-api.yaml") . | sha256sum }}
+checksum/api-configmap: {{ include (print $.Template.BasePath "/api/configmap-api.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Checks configmap checksum annotations
 */}}
 {{- define "stackstate.checks.configmap.checksum" -}}
-checksum/checks-configmap: {{ include (print $.Template.BasePath "/configmap-checks.yaml") . | sha256sum }}
+checksum/checks-configmap: {{ include (print $.Template.BasePath "/checks/configmap-checks.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Correlate configmap checksum annotations
 */}}
 {{- define "stackstate.correlate.configmap.checksum" -}}
-checksum/correlate-configmap: {{ include (print $.Template.BasePath "/configmap-correlate.yaml") . | sha256sum }}
+checksum/correlate-configmap: {{ include (print $.Template.BasePath "/correlate/configmap-correlate.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 E2ES configmap checksum annotations
 */}}
 {{- define "stackstate.e2es.configmap.checksum" -}}
-checksum/e2es-configmap: {{ include (print $.Template.BasePath "/configmap-e2es.yaml") . | sha256sum }}
+checksum/e2es-configmap: {{ include (print $.Template.BasePath "/e2es/configmap-e2es.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Initializer configmap checksum annotations
 */}}
 {{- define "stackstate.initializer.configmap.checksum" -}}
-checksum/initializer-configmap: {{ include (print $.Template.BasePath "/configmap-initializer.yaml") . | sha256sum }}
+checksum/initializer-configmap: {{ include (print $.Template.BasePath "/initializer/configmap-initializer.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Receiver configmap checksum annotations
 */}}
 {{- define "stackstate.receiver.configmap.checksum" -}}
-checksum/receiver-configmap: {{ include (print $.Template.BasePath "/configmap-receiver.yaml") . | sha256sum }}
+checksum/receiver-configmap: {{ include (print $.Template.BasePath "/receiver/configmap-receiver.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Sync configmap checksum annotations
 */}}
 {{- define "stackstate.sync.configmap.checksum" -}}
-checksum/sync-configmap: {{ include (print $.Template.BasePath "/configmap-sync.yaml") . | sha256sum }}
+checksum/sync-configmap: {{ include (print $.Template.BasePath "/sync/configmap-sync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Slicing configmap checksum annotations
 */}}
 {{- define "stackstate.slicing.configmap.checksum" -}}
-checksum/slicing-configmap: {{ include (print $.Template.BasePath "/configmap-slicing.yaml") . | sha256sum }}
+checksum/slicing-configmap: {{ include (print $.Template.BasePath "/slicing/configmap-slicing.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 State configmap checksum annotations
 */}}
 {{- define "stackstate.state.configmap.checksum" -}}
-checksum/state-configmap: {{ include (print $.Template.BasePath "/configmap-state.yaml") . | sha256sum }}
+checksum/state-configmap: {{ include (print $.Template.BasePath "/state/configmap-state.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 HealthSync configmap checksum annotations
 */}}
 {{- define "stackstate.healthSync.configmap.checksum" -}}
-checksum/healthSync-configmap: {{ include (print $.Template.BasePath "/configmap-healthSync.yaml") . | sha256sum }}
+checksum/healthSync-configmap: {{ include (print $.Template.BasePath "/healthSync/configmap-healthSync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 AuthorizationSync configmap checksum annotations
 */}}
 {{- define "stackstate.authorizationSync.configmap.checksum" -}}
-checksum/authorizationSync-configmap: {{ include (print $.Template.BasePath "/configmap-authorizationSync.yaml") . | sha256sum }}
+checksum/authorizationSync-configmap: {{ include (print $.Template.BasePath "/authorizationSync/configmap-authorizationSync.yaml") . | sha256sum }}
 {{- end -}}
 
 {{/*
 Notification configmap checksum annotations
 */}}
 {{- define "stackstate.notification.configmap.checksum" -}}
-checksum/notification-configmap: {{ include (print $.Template.BasePath "/configmap-notification.yaml") . | sha256sum }}
+checksum/notification-configmap: {{ include (print $.Template.BasePath "/notification/configmap-notification.yaml") . | sha256sum }}
 {{- end -}}
 
 
@@ -424,7 +525,7 @@ checksum/notification-configmap: {{ include (print $.Template.BasePath "/configm
 Vmagent configmap checksum annotations
 */}}
 {{- define "stackstate.vmagent.configmap.checksum" -}}
-checksum/vmagent-configmap: {{ include (print $.Template.BasePath "/configmap-vmagent.yaml") . | sha256sum }}
+checksum/vmagent-configmap: {{ include (print $.Template.BasePath "/vmagent/configmap-vmagent.yaml") . | sha256sum }}
 {{- end -}}
 
 
@@ -714,14 +815,11 @@ Return env entries to mount existing secret with the custom keys.
 Return ttlSecondsAfterFinished. We make this a very high value for argo so failures cannot be silently ignored.
 */}}
 {{- define "stackstate.job.ttlSecondsAfterFinished" -}}
-{{- if .Values.deployment.compatibleWithArgoCD }}86400{{- else }}600{{- end -}}
+{{- if .Values.deployment.compatibleWithArgoCD }}86400{{- else }}3600{{- end -}}
 {{- end -}}
 
 {{/*
 Return a value for a feature flag with support for nested keys.
-It gives precedence to the deprecated `experimental` section for backward compatibility.
-If the value is not found in the `experimental` section, it will be looked up in the `features` section.
-Eventually, the `experimental` section will be removed and this helper will be replaced by a direct access to the `features` section.
 
 This helper supports both simple keys (e.g., "traces") and nested keys (e.g., "server.split", "storeTransactionLogsToPVC.enabled").
 
@@ -731,21 +829,13 @@ Usage:
 {{ include "suse-observability.features.get" (dict "key" "storeTransactionLogsToPVC.enabled" "context" $) }}
 */}}
 {{- define "suse-observability.features.get" -}}
-{{/* Initialize the return value as empty */}}
 {{- $value := "" -}}
-
-{{/* found to mark if the key is found in either of hierarchies */}}
 {{- $found := false -}}
 
-{{/* Split the key by dots to handle nested properties (e.g., "server.split" becomes ["server", "split"]) */}}
 {{- $keyParts := split "." .key -}}
-
-{{/* Get references to both the experimental and features sections */}}
-{{- $experimental := .context.Values.stackstate.experimental -}}
 {{- $features := .context.Values.stackstate.features -}}
 
 {{/* STEP 0: If sizing profile is set, check profile-based defaults FIRST for specific keys */}}
-{{/* This ensures profile-based values take precedence over defaults in values.yaml */}}
 {{- if and .context.Values.global .context.Values.global.suseObservability .context.Values.global.suseObservability.sizing .context.Values.global.suseObservability.sizing.profile -}}
   {{- if eq .key "server.split" -}}
     {{- $value = include "common.sizing.stackstate.server.split" .context | trim -}}
@@ -760,60 +850,25 @@ Usage:
   {{- end -}}
 {{- end -}}
 
-{{/* STEP 1: Check experimental section first for backward compatibility */}}
-{{- if $experimental -}}
-  {{/* Start traversing from the experimental object */}}
-  {{- $current := $experimental -}}
-  {{/* Assume we'll find the value unless proven otherwise */}}
-  {{- $found = true -}}
-
-  {{/* Navigate through each part of the key path (e.g., for "server.split": "server" then "split") */}}
-  {{- range $keyParts -}}
-    {{/* Check if current object exists and has the current key part */}}
-    {{- if and $current (hasKey $current .) -}}
-      {{/* Move deeper into the object hierarchy */}}
-      {{- $current = get $current . -}}
-    {{- else -}}
-      {{/* Key path doesn't exist, mark as not found and stop searching */}}
-      {{- $found = false -}}
-      {{- break -}}
-    {{- end -}}
-  {{- end -}}
-
-  {{/* If we successfully navigated the entire key path, use the found value */}}
-  {{- if $found -}}
-    {{- $value = $current -}}
-  {{- end -}}
-{{- end -}}
-
-{{/* STEP 2: If not found in experimental section, check features section */}}
+{{/* STEP 1: Check features section */}}
 {{- if and (not $found) $features -}}
-  {{/* Start traversing from the features object */}}
   {{- $current := $features -}}
-  {{/* Assume we'll find the value unless proven otherwise */}}
   {{- $found = true -}}
 
-  {{/* Navigate through each part of the key path (same logic as experimental section) */}}
   {{- range $keyParts -}}
-    {{/* Check if current object exists and has the current key part */}}
     {{- if and $current (hasKey $current .) -}}
-      {{/* Move deeper into the object hierarchy */}}
       {{- $current = get $current . -}}
     {{- else -}}
-      {{/* Key path doesn't exist, mark as not found and stop searching */}}
       {{- $found = false -}}
       {{- break -}}
     {{- end -}}
   {{- end -}}
 
-  {{/* If we successfully navigated the entire key path, use the found value */}}
   {{- if $found -}}
     {{- $value = $current -}}
   {{- end -}}
 {{- end -}}
 
-{{/* Return the final value (will be empty string if not found in any section) */}}
-{{/* Note: Step 0 above handles global mode profile-based defaults */}}
 {{- $value -}}
 {{- end -}}
 

@@ -21,8 +21,10 @@ Get hbase stackgraph persistence size (for Mono mode)
 Usage: {{ include "common.sizing.hbase.stackgraph.persistence.size" . }}
 */}}
 {{- define "common.sizing.hbase.stackgraph.persistence.size" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}20Gi
 {{- else if eq $profile "10-nonha" }}50Gi
 {{- else if eq $profile "20-nonha" }}50Gi
@@ -32,7 +34,7 @@ Usage: {{ include "common.sizing.hbase.stackgraph.persistence.size" . }}
 {{- else if eq $profile "250-ha" }}250Gi
 {{- else if eq $profile "500-ha" }}250Gi
 {{- else if eq $profile "4000-ha" }}1000Gi
-{{- end }}
+{{- else }}250Gi
 {{- end }}
 {{- end }}
 
@@ -41,8 +43,10 @@ Get hbase stackgraph resources (for Mono mode)
 Usage: {{ include "common.sizing.hbase.stackgraph.resources" . }}
 */}}
 {{- define "common.sizing.hbase.stackgraph.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}
 requests:
   memory: "2250Mi"
@@ -88,7 +92,12 @@ limits:
   cpu: "4000m"
   memory: "4500Mi"
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "1000m"
+  memory: "2Gi"
+limits:
+  memory: "3Gi"
 {{- end }}
 {{- end }}
 
@@ -97,12 +106,24 @@ Get hbase console resources
 Usage: {{ include "common.sizing.hbase.console.resources" . }}
 */}}
 {{- define "common.sizing.hbase.console.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "250-ha" }}
 requests:
   cpu: "50m"
-{{- end }}
+  memory: "4Gi"
+limits:
+  cpu: "500m"
+  memory: "4Gi"
+{{- else }}
+requests:
+  cpu: "50m"
+  memory: "4Gi"
+limits:
+  cpu: "500m"
+  memory: "4Gi"
 {{- end }}
 {{- end }}
 
@@ -111,8 +132,10 @@ Get hbase master resources
 Usage: {{ include "common.sizing.hbase.master.resources" . }}
 */}}
 {{- define "common.sizing.hbase.master.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "150-ha") (eq $profile "250-ha") (eq $profile "500-ha") }}
 requests:
   cpu: "500m"
@@ -131,7 +154,15 @@ limits:
   cpu: "2500m"
   memory: "1024Mi"
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "50m"
+  memory: "1Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "500m"
+  memory: "1Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -140,8 +171,10 @@ Get hbase regionserver resources
 Usage: {{ include "common.sizing.hbase.regionserver.resources" . }}
 */}}
 {{- define "common.sizing.hbase.regionserver.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "150-ha" }}
 requests:
   cpu: "2000m"
@@ -163,11 +196,11 @@ limits:
 {{- else if eq $profile "500-ha" }}
 requests:
   cpu: "4000m"
-  memory: 6Gi
+  memory: 8Gi
   ephemeral-storage: "1Mi"
 limits:
   cpu: "8000m"
-  memory: 6Gi
+  memory: 8Gi
   ephemeral-storage: "1Gi"
 {{- else if eq $profile "4000-ha" }}
 requests:
@@ -178,7 +211,15 @@ limits:
   cpu: "8000m"
   memory: 12Gi
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "500m"
+  memory: "3Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "3000m"
+  memory: "3Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -187,8 +228,10 @@ Get hbase hdfs datanode resources
 Usage: {{ include "common.sizing.hbase.hdfs.datanode.resources" . }}
 */}}
 {{- define "common.sizing.hbase.hdfs.datanode.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "150-ha") (eq $profile "250-ha") (eq $profile "500-ha") }}
 requests:
   cpu: "600m"
@@ -207,7 +250,15 @@ limits:
   cpu: "6000m"
   memory: "5Gi"
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "100m"
+  memory: "4Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "500m"
+  memory: "4Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -216,8 +267,10 @@ Get hbase hdfs namenode resources
 Usage: {{ include "common.sizing.hbase.hdfs.namenode.resources" . }}
 */}}
 {{- define "common.sizing.hbase.hdfs.namenode.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "150-ha") (eq $profile "250-ha") (eq $profile "500-ha") }}
 requests:
   cpu: "200m"
@@ -236,7 +289,15 @@ limits:
   cpu: "4000m"
   memory: "2048Mi"
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "50m"
+  memory: "1Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "500m"
+  memory: "1Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -257,8 +318,10 @@ Get hbase hdfs secondarynamenode resources
 Usage: {{ include "common.sizing.hbase.hdfs.secondarynamenode.resources" . }}
 */}}
 {{- define "common.sizing.hbase.hdfs.secondarynamenode.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "150-ha") (eq $profile "250-ha") (eq $profile "500-ha") }}
 requests:
   cpu: "10m"
@@ -277,7 +340,15 @@ limits:
   cpu: "500m"
   memory: "1Gi"
   ephemeral-storage: "1Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "50m"
+  memory: "1Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "500m"
+  memory: "1Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -286,8 +357,10 @@ Get hbase tephra resources
 Usage: {{ include "common.sizing.hbase.tephra.resources" . }}
 */}}
 {{- define "common.sizing.hbase.tephra.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "trial" }}
 limits:
   cpu: "100m"
@@ -360,7 +433,15 @@ requests:
   cpu: "4000m"
   memory: "3Gi"
   ephemeral-storage: "1Mi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "250m"
+  memory: "3Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "500m"
+  memory: "3Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -415,6 +496,16 @@ Returns: Resolved replica count (callers pipe to | int as needed)
 {{- end }}
 
 {{/*
+Get effective hdfs datanode replication, overridable through the chart.
+Usage: {{ include "common.sizing.hdfs.datanode.effectiveReplication" . }}
+Returns: Resolved replication (callers pipe to | int as needed)
+*/}}
+{{- define "common.sizing.hdfs.datanode.effectiveReplication" -}}
+{{- $sizingReplication := include "common.sizing.hdfs.replication" . | trim -}}
+{{- include "common.sizing.effectiveCount" (dict "sizingCount" $sizingReplication "chartDefault" "2" "valuesCount" .Values.hdfs.replication) -}}
+{{- end }}
+
+{{/*
 Get hbase experimental.execLivenessProbe.enabled
 Usage: {{ include "common.sizing.hbase.experimental.execLivenessProbe.enabled" . }}
 */}}
@@ -441,10 +532,12 @@ Get hbase hdfs datanode persistence size
 Usage: {{ include "common.sizing.hbase.hdfs.datanode.persistence.size" . }}
 */}}
 {{- define "common.sizing.hbase.hdfs.datanode.persistence.size" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if eq $profile "4000-ha" }}1000Gi
-{{- end }}
+{{- else }}250Gi
 {{- end }}
 {{- end }}
 
@@ -484,12 +577,23 @@ Returns: 1 for non-HA profiles, 2 for HA profiles, empty if no profile set
 {{/*
 Get hdfs datanode replicaCount
 Usage: {{ include "common.sizing.hdfs.datanode.replicaCount" . }}
-Returns: 1 for non-HA profiles, 3 for HA profiles, empty if no profile set
+Returns: 1 for non-HA profiles, 3 for HA profiles, 5 for 4000-ha profile, empty if no profile set
 */}}
 {{- define "common.sizing.hdfs.datanode.replicaCount" -}}
-{{- $profileMap := dict "trial" "1" "10-nonha" "1" "20-nonha" "1" "50-nonha" "1" "100-nonha" "1" "150-ha" "3" "250-ha" "3" "500-ha" "3" "4000-ha" "3" -}}
+{{- $profileMap := dict "trial" "1" "10-nonha" "1" "20-nonha" "1" "50-nonha" "1" "100-nonha" "1" "150-ha" "3" "250-ha" "3" "500-ha" "3" "4000-ha" "5" -}}
 {{- include "common.sizing.profileLookup" (dict "profileMap" $profileMap "context" .) -}}
 {{- end }}
+
+{{/*
+Get hdfs datanode replication
+Usage: {{ include "common.sizing.hdfs.replication" . }}
+Returns: 1 for non-HA profiles 2 for 150-500ha profiles, 3 for 4000-HA profile
+*/}}
+{{- define "common.sizing.hdfs.replication" -}}
+{{- $profileMap := dict "trial" "1" "10-nonha" "1" "20-nonha" "1" "50-nonha" "1" "100-nonha" "1" "150-ha" "2" "250-ha" "2" "500-ha" "2" "4000-ha" "3" -}}
+{{- include "common.sizing.profileLookup" (dict "profileMap" $profileMap "context" .) -}}
+{{- end }}
+
 
 {{/*
 Get hdfs secondarynamenode replicaCount

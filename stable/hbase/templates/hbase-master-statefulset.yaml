@@ -5,8 +5,8 @@ command:
 - -c
 - |
   /entrypoint -c {{ include "hbase.zookeeper.endpoint" . }}:2181,{{ template "common.fullname.short" . }}-hdfs-nn-headful:9000,{{ template "common.fullname.short" . }}-hdfs-dn:50010 -t 300
-image: "{{ include "common.image.registry" (dict "image" .Values.wait.image "context" .) }}/{{ .Values.wait.image.repository }}:{{ .Values.wait.image.tag }}"
-imagePullPolicy: {{ .Values.wait.image.pullPolicy | quote }}
+image: "{{ include "common.image.registry" (dict "image" .Values.global.wait.image "context" .) }}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
 {{- end -}}
 
 {{- define "hbase.hbase.master.container.main" -}}
@@ -26,12 +26,9 @@ env:
 - name: HBASE_MASTER_LIVENESS_HTTP_PORT
   value: "16010"
 {{- end }}
-{{- $profileResources := include "common.sizing.hbase.master.resources" . | trim -}}
-{{- $evaluatedResources := .Values.hbase.master.resources }}
-{{- if $profileResources }}
-{{- $profileResourcesDict := fromYaml $profileResources }}
-{{- $evaluatedResources = merge $profileResourcesDict .Values.hbase.master.resources }}
-{{- end }}
+{{- $sizingResources := include "common.sizing.hbase.master.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.hbase.master.resources $sizingResourcesDict }}
 {{- $masterWithResources := merge (dict "resources" $evaluatedResources) .Values.hbase.master }}
 {{- $serviceConfig := dict "ServiceConfig" (merge $masterWithResources .Values.all) }}
 {{- include "hbase.service.envvars" $serviceConfig }}

@@ -8,6 +8,16 @@ global:
 pull-secret:
   enabled: true
 
+ai:
+  assistant:
+    enabled: "true"
+
+backup:
+  storage:
+    backend:
+      pvc:
+        enabled: true
+
 stackstate:
   components:
     all:

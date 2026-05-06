@@ -6,6 +6,20 @@ global:
   storageClass:
   # global.commonLabels -- Labels to add to deployments, StatefulSets, and Pods managed by the chart.
   commonLabels: {}
+  # Wait image for init containers
+  wait:
+    image:
+      # global.wait.image.registry -- Base container image registry for wait containers.
+      registry: ''
+      # global.wait.image.repository -- Base container image repository for wait containers.
+      repository: ''
+      # global.wait.image.tag -- Container image tag for wait containers.
+      tag: ''
+      # global.wait.image.pullPolicy -- Image pull policy for wait containers.
+      pullPolicy: ''
+# commonLabels -- Add additional labels to all resources created for all hbase resources
+commonLabels:
+  app.kubernetes.io/part-of: suse-observability
 # version -- Version of hbase to use
 version: "2.5"
 # stackstate.deployment.mode -- (Distributed, Mono) Run a single stackgraph service or split in multiple sub services as hbase-master, hbase-rs ....
@@ -28,7 +42,7 @@ all:
     secret: {}
   metrics:
     # all.metrics.enabled -- Enable metrics port.
-    enabled: false
+    enabled: true
     # stackstate.components.all.metrics.agentAnnotationsEnabled -- Put annotations on each pod to instruct the stackstate agent to scrape the metrics
     agentAnnotationsEnabled: true
     servicemonitor:
@@ -67,15 +81,10 @@ stackgraph:
     # stackgraph.persistence.enabled -- Enable persistence for HDFS data nodes.
     enabled: true
     # stackgraph.persistence.size -- Size of volume for HDFS data nodes.
-    size: 250Gi
+    size: null
     # stackgraph.persistence.storageClass -- Storage class of the volume for HDFS data nodes.
     storageClass:
-  resources:
-    limits:
-      memory: "3Gi"
-    requests:
-      memory: "2Gi"
-      cpu: "1000m"
+  resources: {}
   # stackgraph.sizing -- Stackgraph memory sizing for JVM
   sizing:
     javaHeapMemoryFraction: "60"
@@ -91,7 +100,7 @@ stackgraph:
   # stackgraph.tolerations -- Toleration labels for pod assignment.
   tolerations: []
   # stackgraph.version -- Version of stackgraph to use
-  version: 7.13.18
+  version: 7.14.1
 console:
   # console.enabled -- Enable / disable deployment of the stackgraph-console for debugging.
   enabled: true
@@ -115,13 +124,7 @@ console:
     # console.image.tag -- Container image tag for console pods, defaults to `version`-`stackgraph.version`
     tag:
   # console.resources -- Resources to allocate for HDFS console.
-  resources:
-    limits:
-      memory: "4Gi"
-      cpu: "500m"
-    requests:
-      memory: "4Gi"
-      cpu: "50m"
+  resources: {}
   # console.replicaCount -- Amount of console replicas to provision. Default of 0,
   replicaCount: 0
   # console.strategy -- The strategy for the Deployment object.
@@ -140,16 +143,6 @@ console:
     enabled: false
     # console.integrity.schedule -- Schedule at which the integrity check runs
     schedule: '*/30 * * * *'
-wait:
-  image:
-    # wait.image.registry -- Base container image registry for wait containers.
-    registry: quay.io
-    # wait.image.repository -- Base container image repository for wait containers.
-    repository: stackstate/wait
-    # wait.image.repository -- Container image tag for wait containers.
-    tag: 1.0.11-04b49abf
-    # wait.image.pullPolicy -- Image pull policy for wait containers.
-    pullPolicy: IfNotPresent
 hbase:
   securityContext:
     # hbase.securityContext.enabled -- Whether to explicitly set the UID/GID of the pod.
@@ -163,7 +156,7 @@ hbase:
       execLivenessProbe:
         # hbase.master.experimental.execLivenessProbe.enabled -- Whether to use a new scripted livenessProbe instead of the original HTTP check.
         # Requires >= 4.11.5 version of the StackGraph docker images
-        enabled: false
+        enabled: true
     extraEnv:
       # hbase.master.extraEnv.open -- Extra open environment variables to inject into pods.
       open: {}
@@ -179,15 +172,7 @@ hbase:
     # hbase.master.replicaCount -- Number of pods for HBase masters.
     replicaCount: null
     # hbase.master.resources -- Resources to allocate for HBase masters.
-    resources:
-      limits:
-        memory: "1Gi"
-        cpu: "500m"
-        ephemeral-storage: "1Gi"
-      requests:
-        memory: "1Gi"
-        cpu: "50m"
-        ephemeral-storage: "1Mi"
+    resources: {}
     # hbase.master.terminationGracePeriodSeconds -- Grace period to stop the pod. We give some time to fix under replicated blocks in Pre Stop hook
     terminationGracePeriodSeconds: 30
     # hbase.master.sizing -- HBase master memory sizing for JVM
@@ -215,20 +200,12 @@ hbase:
     # hbase.regionserver.replicaCount -- Number of HBase regionserver nodes.
     replicaCount: null
     # hbase.regionserver.resources -- Resources to allocate for HBase region servers.
-    resources:
-      limits:
-        memory: "3Gi"
-        cpu: "3000m"
-        ephemeral-storage: "1Gi"
-      requests:
-        memory: "3Gi"
-        cpu: "500m"
-        ephemeral-storage: "1Mi"
+    resources: {}
     # hbase.regionserver.terminationGracePeriodSeconds -- Grace period to stop the pod. We give some time to fix under replicated blocks in Pre Stop hook
     terminationGracePeriodSeconds: 30
     # hbase.regionserver.sizing -- HBase region server memory sizing for JVM
     sizing:
-      javaHeapMemoryFraction: "75"
+      javaHeapMemoryFraction: "70"
     # hbase.regionserver.nodeSelector -- Node labels for pod assignment.
     nodeSelector: {}
     # hbase.regionserver.tolerations -- Toleration labels for pod assignment.
@@ -240,9 +217,11 @@ hbase:
     quorum: hbase
 hdfs:
   # hdfs.version -- The hadoop version is automatically derived from the hbase version, this is the specific build version of the HDFS image for that version
-  version: java21-8-5e4f83b6
+  version: java21-8-e86b1b03-349
+  # hdfs.replication -- Sets the target amount of replication. These are the amount replicas hdfs strives for. (If hdfs.datanode.replicaCount is set to a value less than this, the replication factor will be equal to the replicaCount.)
+  replication: null
   # hdfs.minReplication -- Sets the minimum synchronous replication that the namenode will enforce when writing a block. This gives guarantees about the amount of copies of a single block. (If hdfs.datanode.replicaCount is set to a value less than this, the replication factor will be equal to the replicaCount.)
-  minReplication: 1
+  minReplication: 2
   scc:
     # hdfs.scc.enabled -- Whether to create an OpenShift SecurityContextConfiguration (required when running on OpenShift)
     enabled: false
@@ -287,21 +266,13 @@ hdfs:
       # hdfs.datanode.persistence.enabled -- Enable persistence for HDFS data nodes.
       enabled: true
       # hdfs.datanode.persistence.size -- Size of volume for HDFS data nodes.
-      size: 250Gi
+      size: null
       # hdfs.datanode.persistence.storageClass -- Storage class of the volume for HDFS data nodes.
       storageClass:
     # hdfs.datanode.replicaCount -- Number of HDFS data nodes.
     replicaCount: null
     # hdfs.datanode.resources -- Resources to allocate for HDFS data nodes.
-    resources:
-      limits:
-        memory: "4Gi"
-        cpu: "500m"
-        ephemeral-storage: "1Gi"
-      requests:
-        memory: "4Gi"
-        cpu: "100m"
-        ephemeral-storage: "1Mi"
+    resources: {}
     # hdfs.datanode.sizing -- HDFS Datanode memory sizing for JVMs in pods
     sizing:
       javaHeapMemoryFraction: "75"
@@ -329,15 +300,7 @@ hdfs:
       # hdfs.namenode.persistence.storageClass -- Storage class of the volume for HDFS name nodes.
       storageClass:
     # hdfs.namenode.resources -- Resources to allocate for HDFS name nodes.
-    resources:
-      limits:
-        memory: "1Gi"
-        cpu: "500m"
-        ephemeral-storage: "1Gi"
-      requests:
-        memory: "1Gi"
-        cpu: "50m"
-        ephemeral-storage: "1Mi"
+    resources: {}
     # hdfs.namenode.terminationGracePeriodSeconds -- Grace period to stop the pod. We give some time to fix under replicated blocks in Pre Stop hook
     terminationGracePeriodSeconds: 30
     # hdfs.namenode.sizing -- HDFS name node memory sizing for JVM
@@ -356,7 +319,7 @@ hdfs:
       # hdfs.secondarynamenode.extraEnv.secret -- Extra secret environment variables to inject into pods via a `Secret` object.
       secret: {}
     # hdfs.secondarynamenode.enabled -- Enable / disable secondary name nodes.
-    enabled: false
+    enabled: true
     persistence:
       # hdfs.secondarynamenode.persistence.accessModes -- Access mode for HDFS secondary name nodes.
       accessModes: ["ReadWriteOnce"]
@@ -367,15 +330,7 @@ hdfs:
       # hdfs.secondarynamenode.persistence.storageClass -- Storage class of the volume for HDFS secondary name nodes.
       storageClass:
     # hdfs.secondarynamenode.resources -- Resources to allocate for HDFS secondary name nodes.
-    resources:
-      limits:
-        memory: "1Gi"
-        cpu: "500m"
-        ephemeral-storage: "1Gi"
-      requests:
-        memory: "1Gi"
-        cpu: "50m"
-        ephemeral-storage: "1Mi"
+    resources: {}
     # hdfs.secondarynamenode.terminationGracePeriodSeconds -- Grace period to stop the pod. We give some time to fix under replicated blocks in Pre Stop hook
     terminationGracePeriodSeconds: 30
     # hdfs.secondarynamenode.sizing -- HDFS secondary name node memory sizing for JVM
@@ -412,15 +367,7 @@ tephra:
   # tephra.replicaCount -- Number of pods for Tephra pods.
   replicaCount: null
   # tephra.resources -- Resources to allocate for Tephra pods.
-  resources:
-    limits:
-      memory: "3Gi"
-      cpu: "500m"
-      ephemeral-storage: "1Gi"
-    requests:
-      memory: "3Gi"
-      cpu: "250m"
-      ephemeral-storage: "1Mi"
+  resources: {}
   # tephra.sizing -- Tephra memory sizing for JVM
   sizing:
     javaHeapMemoryFraction: "65"
@@ -454,4 +401,4 @@ statefulset:
 #############################
 zookeeper:
   # zookeeper.externalServers -- The list of external Zookeeper servers.
-  externalServers: ""
+  externalServers: suse-observability-zookeeper-headless

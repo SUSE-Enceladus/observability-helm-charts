@@ -3,10 +3,10 @@ elasticsearch:
   resources:
     requests:
       cpu: "4"
-      memory: 4Gi
+      memory: 5Gi
     limits:
       cpu: "6"
-      memory: 4Gi
+      memory: 5Gi
 
 hbase:
   hbase:
@@ -285,12 +285,6 @@ minio:
     limits:
       cpu: 250m
       memory: 256Mi
-kafkaup-operator:
-  resources:
-    requests:
-      cpu: 10m
-    limits:
-      cpu: 10m
 victoria-metrics-0:
   server:
     persistentVolume:
@@ -298,7 +292,7 @@ victoria-metrics-0:
     resources:
       requests:
         cpu: "7"
-        memory: 16Gi
+        memory: 18Gi
       limits:
         cpu: 8000m
         memory: 18Gi
@@ -316,7 +310,7 @@ victoria-metrics-1:
     resources:
       requests:
         cpu: 7
-        memory: 16Gi
+        memory: 18Gi
       limits:
         cpu: 8000m
         memory: 18Gi

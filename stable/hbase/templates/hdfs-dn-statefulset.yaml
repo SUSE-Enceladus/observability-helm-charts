@@ -14,8 +14,8 @@ command:
   {{- if .Values.hdfs.volumePermissions.enabled }}
   chown -R {{ .Values.hdfs.securityContext.runAsUser }}:{{ .Values.hdfs.securityContext.runAsGroup }} /hadoop-data
   {{- end }}
-image: "{{ include "common.image.registry" (dict "image" .Values.wait.image "context" .) }}/{{ .Values.wait.image.repository }}:{{ .Values.wait.image.tag }}"
-imagePullPolicy: {{ .Values.wait.image.pullPolicy | quote }}
+image: "{{ include "common.image.registry" (dict "image" .Values.global.wait.image "context" .) }}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
 {{- if .Values.hdfs.volumePermissions.securityContext.enabled }}
 securityContext: {{- omit .Values.hdfs.volumePermissions.securityContext "enabled" | toYaml | nindent 2 }}
 {{- end }}
@@ -37,12 +37,9 @@ env:
 {{- include "hbase.hdfs.commonEnv" . }}
 {{- include "all.commonEnv" . }}
 {{- include "hdfs.datanode.commonEnv" . }}
-{{- $profileResources := include "common.sizing.hbase.hdfs.datanode.resources" . | trim -}}
-{{- $evaluatedResources := .Values.hdfs.datanode.resources }}
-{{- if $profileResources }}
-{{- $profileResourcesDict := fromYaml $profileResources }}
-{{- $evaluatedResources = merge $profileResourcesDict .Values.hdfs.datanode.resources }}
-{{- end }}
+{{- $sizingResources := include "common.sizing.hbase.hdfs.datanode.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.hdfs.datanode.resources $sizingResourcesDict }}
 {{- $datanodeWithResources := merge (dict "resources" $evaluatedResources) .Values.hdfs.datanode }}
 {{- $serviceConfig := dict "ServiceConfig" (merge $datanodeWithResources .Values.all) }}
 {{- include "hbase.service.envvars" $serviceConfig }}

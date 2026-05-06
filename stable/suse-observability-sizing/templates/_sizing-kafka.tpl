@@ -56,7 +56,7 @@ Usage: {{ include "common.sizing.kafka.extraEnv.open" . }}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
 {{- $profile := .Values.global.suseObservability.sizing.profile -}}
 {{- if eq $profile "4000-ha" }}
-KAFKA_CFG_REPLICA_FETCH_MAX_BYTES: "4194304"
+KAFKA_REPLICA_FETCH_MAX_BYTES: "4194304"
 {{- end }}
 {{- end }}
 {{- end }}
@@ -102,8 +102,10 @@ Get kafka resources
 Usage: {{ include "common.sizing.kafka.resources" . }}
 */}}
 {{- define "common.sizing.kafka.resources" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") }}
 requests:
   cpu: "800m"
@@ -160,7 +162,15 @@ requests:
 limits:
   cpu: "5000m"
   memory: "8Gi"
-{{- end }}
+{{- else }}
+requests:
+  cpu: "500m"
+  memory: "2Gi"
+  ephemeral-storage: "1Mi"
+limits:
+  cpu: "1000m"
+  memory: "2Gi"
+  ephemeral-storage: "1Gi"
 {{- end }}
 {{- end }}
 
@@ -189,10 +199,12 @@ Get kafka persistence.size
 Usage: {{ include "common.sizing.kafka.persistence.size" . }}
 */}}
 {{- define "common.sizing.kafka.persistence.size" -}}
+{{- $profile := "" -}}
 {{- if and .Values.global .Values.global.suseObservability .Values.global.suseObservability.sizing .Values.global.suseObservability.sizing.profile -}}
-{{- $profile := .Values.global.suseObservability.sizing.profile -}}
+{{- $profile = .Values.global.suseObservability.sizing.profile -}}
+{{- end -}}
 {{- if or (eq $profile "trial") (eq $profile "10-nonha") }}60Gi
 {{- else if or (eq $profile "500-ha") (eq $profile "4000-ha") }}400Gi
-{{- end }}
+{{- else }}100Gi
 {{- end }}
 {{- end }}
