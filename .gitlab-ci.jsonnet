@@ -63,6 +63,12 @@ local skip_when_dependency_upgrade = {
     @'if': '$UPDATE_STACKSTATE_DOCKER_VERSION',
     when: 'never',
   }, {
+    @'if': '$UPDATE_MCP_DOCKER_VERSION',
+    when: 'never',
+  }, {
+    @'if': '$UPDATE_AI_ASSISTANT_DOCKER_VERSION',
+    when: 'never',
+  }, {
     @'if': '$UPDATE_STACKPACKS_DOCKER_VERSION',
     when: 'never',
   }, {
@@ -634,6 +640,38 @@ local validate_updatecli_config = {
   },
 };
 
+local validate_updatecli_config = {
+  validate_updatecli_config: {
+    image: variables.images.chart_testing,
+    stage: 'validate',
+    script: [
+      'echo "Updatecli config changes detected — validating file structure"',
+      'test -f updatecli/values.d/values.yaml',
+      'yamllint -d "{rules: {document-start: disable, line-length: disable}}" updatecli/values.d/values.yaml',
+    ],
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['updatecli/**/*'],
+      },
+    ],
+  },
+  validate_updatecli_diff: {
+    image: variables.images.container_tools_dev,
+    stage: 'validate',
+    script: [
+      'export GITLAB_TOKEN="$gitlab_api_scope_token"',
+      'updatecli diff --config updatecli/updatecli.d/update-docker-images/ --values updatecli/values.d/values.yaml',
+    ],
+    rules: [
+      {
+        @'if': '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        changes: ['updatecli/**/*'],
+      },
+    ],
+  },
+};
+
 local beest_triggers = {
   beest_agent_trigger: {
     image: variables.images.stackstate_devops,
@@ -710,6 +748,7 @@ local beest_triggers = {
 + validate_local_chart_jobs
 + validate_updatecli_config
 + check_chart_version_jobs
++ check_sizing_chart_jobs
 + test_chart_jobs
 + test_local_chart_jobs
 + resource_usage

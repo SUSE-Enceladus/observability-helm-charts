@@ -296,4 +296,3 @@ OpenTelemetry Collector Helm chart for Kubernetes
 | tolerations | list | `[]` |  |
 | topologySpreadConstraints | list | `[]` |  |
 | useGOMEMLIMIT | bool | `true` |  |
-

@@ -101,4 +101,3 @@ A Helm chart for GitLab Proxy - Nginx-based caching proxy for GitLab packages re
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
 | tolerations | list | `[]` |  |
-

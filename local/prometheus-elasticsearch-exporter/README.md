@@ -123,4 +123,3 @@ Kubernetes: `>=1.10.0-0`
 | serviceMonitor.targetLabels | list | `[]` |  |
 | tolerations | list | `[]` |  |
 | web.path | string | `"/metrics"` |  |
-

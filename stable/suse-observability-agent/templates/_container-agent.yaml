@@ -51,6 +51,10 @@
       value: "false"
     - name: STS_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED
       value: "false"
+    - name: STS_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED
+      value: "false"
+    - name: STS_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED
+      value: "false"
     - name: STS_SKIP_SSL_VALIDATION
       value: {{ or .Values.global.skipSslValidation .Values.nodeAgent.skipSslValidation | quote }}
     - name: STS_STS_URL

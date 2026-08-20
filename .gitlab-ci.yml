@@ -67,6 +67,27 @@ beest_stackstate_trigger:
     - echo "Triggering beest pipeline with STACKSTATE_HELM_CHART_VERSION=${STACKSTATE_HELM_CHART_VERSION}"
     - curl --verbose --fail-with-body --request POST --form "token=$STS_BEEST_TRIGGER_TOKEN" --form ref=main --form "variables[STACKSTATE_HELM_CHART_VERSION]=${STACKSTATE_HELM_CHART_VERSION}" --form "variables[TRIGGER_AGENT_X86_TESTS]=true" "https://gitlab.com/api/v4/projects/$BEEST_PROJECT_ID/trigger/pipeline"
   stage: update
+build_anomaly-detection:
+  artifacts:
+    paths:
+      - stable/anomaly-detection/charts/
+      - stable/anomaly-detection/build/
+  before_script:
+    - helm repo add deliveryhero https://charts.deliveryhero.io
+    - helm repo add opentelemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    - helm repo add stackstate https://helm.stackstate.io
+    - helm repo add victoriametrics https://victoriametrics.github.io/helm-charts
+    - helm repo update
+  image: ${REGISTRY_QUAY_URL}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+  rules:
+    - changes:
+        - stable/anomaly-detection/**/*
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - yq e '.dependencies[] | select (.repository == "file*").repository | sub("^file://","")' stable/anomaly-detection/Chart.yaml  | xargs -I % helm dependencies build --skip-refresh stable/anomaly-detection/%
+    - helm dependencies build stable/anomaly-detection
+    - mkdir -p stable/anomaly-detection/build; helm package --destination stable/anomaly-detection/build stable/anomaly-detection
+  stage: build
 build_artifactory-cleaner:
   artifacts:
     paths:
@@ -1019,7 +1040,6 @@ check_codeartifact-proxy_version:
         - stable/codeartifact-proxy/**/*
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - .gitlab/verify_versions_bumped.sh codeartifact-proxy
   stage: validate
 check_gitlab-proxy_version:
   before_script:
@@ -1175,6 +1195,17 @@ check_suse-observability-agent_version:
   script:
     - .gitlab/verify_versions_bumped.sh suse-observability-agent
   stage: validate
+check_suse-observability-sizing_version:
+  before_script:
+    - .gitlab/validate_before_script.sh
+  image: quay.io/helmpack/chart-testing:v3.10.1
+  rules:
+    - changes:
+        - stable/suse-observability-sizing/**/*
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - .gitlab/verify_versions_bumped.sh suse-observability-sizing
+  stage: validate
 check_suse-observability-values_version:
   before_script:
     - .gitlab/validate_before_script.sh
@@ -1265,6 +1296,10 @@ push_artifactory-cleaner_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1303,6 +1338,10 @@ push_aws-pod-identity-webhook_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1343,6 +1382,10 @@ push_beacher-job_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1381,6 +1424,10 @@ push_chartmuseum_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1421,6 +1468,10 @@ push_ci-test_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1459,6 +1510,10 @@ push_codeartifact-proxy_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1499,6 +1554,10 @@ push_gitlab-proxy_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1537,6 +1596,10 @@ push_gitlab-steward_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1577,6 +1640,10 @@ push_helm-reaper_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1615,6 +1682,10 @@ push_k8s-spot-termination-handler_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1655,6 +1726,10 @@ push_keycloak_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1693,6 +1768,10 @@ push_kommoner-operator_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1733,6 +1812,10 @@ push_notification-operator_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1772,6 +1855,10 @@ push_otel-demo_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1810,6 +1897,10 @@ push_petros-d-kubelet-stats-exporter_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1851,6 +1942,10 @@ push_prerelease_suse-observability-agent_to_public:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -1898,6 +1993,10 @@ push_prerelease_suse-observability-values_to_public:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1938,6 +2037,10 @@ push_receiveramplifier_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -1976,6 +2079,10 @@ push_redirector_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2016,13 +2123,13 @@ push_sock-shop_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
-      when: never
-    - if: $RUN_UPDATECLI_STACKSTATE
-      when: never
-    - if: $RUN_UPDATECLI_STACKPACKS
       when: never
     - changes:
         - stable/sock-shop/**/*
@@ -2054,6 +2161,10 @@ push_stackstate-monitoring_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2090,6 +2201,10 @@ push_suse-observability-agent_prerelease_to_rancher:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -2097,6 +2212,8 @@ push_suse-observability-agent_prerelease_to_rancher:
     - if: $RUN_UPDATECLI_STACKSTATE
       when: never
     - if: $RUN_UPDATECLI_STACKPACKS
+      when: never
+    - if: $RUN_UPDATECLI
       when: never
     - changes:
         - stable/suse-observability-agent/**/*
@@ -2177,6 +2294,10 @@ push_suse-observability-agent_to_public:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -2215,6 +2336,10 @@ push_suse-observability-agent_to_rancher:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2258,6 +2383,10 @@ push_suse-observability-values_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -2298,6 +2427,10 @@ push_suse-observability-values_to_public:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2340,6 +2473,10 @@ push_suse-observability_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2411,6 +2548,10 @@ push_tenant-cleanup-controller_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -2449,6 +2590,10 @@ push_tenantmanagement_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2489,6 +2634,10 @@ push_tenantprovisioning_to_internal:
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
       when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
+      when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
     - if: $RUN_UPDATECLI
@@ -2527,6 +2676,10 @@ push_trafficmirror_to_internal:
     - if: $UPDATE_AAD_CHART_VERSION
       when: never
     - if: $UPDATE_STACKSTATE_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_MCP_DOCKER_VERSION
+      when: never
+    - if: $UPDATE_AI_ASSISTANT_DOCKER_VERSION
       when: never
     - if: $UPDATE_STACKPACKS_DOCKER_VERSION
       when: never
@@ -2650,6 +2803,30 @@ stages:
   - push-charts-to-internal
   - push-charts-to-public
   - push-charts-to-rancher
+test_anomaly-detection:
+  cache:
+    key:
+      files:
+        - go.mod
+        - go.sum
+    paths:
+      - /go/pkg/mod/
+  image: ${REGISTRY_QUAY_URL}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+  rules:
+    - changes:
+        - stable/anomaly-detection/**/*
+      exists:
+        - stable/anomaly-detection/test/*.go
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - go mod download
+    - go test ./stable/anomaly-detection/test/...
+  stage: test
+  tags:
+    - sts-k8s-xl-runner
+  variables:
+    CGO_ENABLED: 0
+    GOPATH: /go
 test_artifactory-cleaner:
   cache:
     key:

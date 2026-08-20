@@ -50,4 +50,3 @@ Notification Operator manages SuseObservability Notification Configurations with
 | tolerations | list | `[]` | Tolerations for pod scheduling |
 | volumeMounts | list | `[]` | Additional volume mounts for the Deployment |
 | volumes | list | `[]` | Additional volumes for the Deployment |
-
