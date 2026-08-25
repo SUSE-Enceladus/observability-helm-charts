@@ -1,0 +1,26 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+# Rancher enrichment enabled with all other integrations disabled.
+# Exercises the rancher_enrichment config block in the ConfigMap and the
+# Role/RoleBinding in cattle-system.
+otel:
+  enabled: true
+  integrations:
+    suseRuntimeEnforcer: false
+    suseAdmissionController: false
+    suseVirtualization: false
+    suseSbomScanner: false
+    rancherAgent: true
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "*": true
+    rbac:
+      useWildcard: true

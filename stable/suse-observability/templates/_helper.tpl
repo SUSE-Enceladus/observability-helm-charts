@@ -24,9 +24,17 @@ Internal constants — values that are fixed by the application and not user-con
 {{- define "stackstate.mcp.port" -}}8080{{- end -}}
 {{- define "stackstate.mcp.listenAddress" -}}:{{ include "stackstate.mcp.port" . }}{{- end -}}
 {{- define "stackstate.aiAssistant.port" -}}8081{{- end -}}
+
+{{/*
+The MCP server is deployed when explicitly enabled or when the AI Assistant is enabled,
+since the AI Assistant is an MCP client that requires the MCP server.
+*/}}
+{{- define "stackstate.mcp.enabled" -}}
+{{- or .Values.ai.mcp.enabled .Values.ai.assistant.enabled -}}
+{{- end -}}
 {{- define "stackstate.cache.backend" -}}mapdb{{- end -}}
 {{- define "stackstate.metricStore.remoteWritePath" -}}/api/v1/write{{- end -}}
-{{- define "stackstate.metrics.defaultAgentMetricsFilter" -}}["kafka_consumer_consumer_fetch_manager_metrics*", "kafka_producer_producer_topic_metrics*", "jvm*", "akka_http_requests_active", "stackstate*", "receiver*", "stackgraph*", "caffeine*"]{{- end -}}
+{{- define "stackstate.metrics.defaultAgentMetricsFilter" -}}["kafka_consumer_consumer_fetch_manager_metrics*", "kafka_producer_producer_topic_metrics*", "jvm*", "pekko_http_requests_active", "stackstate*", "receiver*", "stackgraph*", "caffeine*"]{{- end -}}
 {{- define "stackstate.vmagent.agentMetricsFilter" -}}["vm*", "go*"]{{- end -}}
 {{- define "stackstate.vmagent.fullname" -}}suse-observability-vmagent{{- end -}}
 {{- define "stackstate.kafka.fullname" -}}suse-observability-kafka{{- end -}}
@@ -98,13 +106,6 @@ Return the image registry for the router container
 */}}
 {{- define "stackstate.router.image.registry" -}}
 {{ include "common.image.registry" ( dict "image" .Values.stackstate.components.router.image "context" $) }}
-{{- end -}}
-
-{{/*
-Return the image registry for the stackpacks containers
-*/}}
-{{- define "stackstate.stackpacks.image.registry" -}}
-{{ include "common.image.registry" ( dict "image" .Values.stackstate.stackpacks.image "context" $) }}
 {{- end -}}
 
 {{/*
@@ -444,6 +445,13 @@ checksum/api-configmap: {{ include (print $.Template.BasePath "/api/configmap-ap
 {{- end -}}
 
 {{/*
+StackPack scripts configmap checksum annotations
+*/}}
+{{- define "stackstate.stackpacks.scripts.configmap.checksum" -}}
+checksum/stackpack-scripts-configmap: {{ include (print $.Template.BasePath "/global/configmap-stackpacks-scripts.yaml") . | sha256sum }}
+{{- end -}}
+
+{{/*
 Checks configmap checksum annotations
 */}}
 {{- define "stackstate.checks.configmap.checksum" -}}
@@ -606,12 +614,33 @@ Usage:
 {{- end -}}
 
 {{/*
+Name of the Secret holding the SUSE Observability registry pull credentials, used by all normal workloads.
+*/}}
+{{- define "suse-observability.pullSecret.name" -}}
+suse-observability-pull-secret
+{{- end -}}
+
+{{/*
+Name of the hook-managed copy of the pull secret. It is created during pre-install/pre-upgrade/post-delete
+hooks so that hook Jobs running before the normal Secret exists (or after it has been removed) can still pull
+images. It must differ from suse-observability.pullSecret.name so GitOps tools (ArgoCD/Flux) and
+`helm template | kubectl apply` never see two resources with the same name.
+*/}}
+{{- define "suse-observability.pullSecret.hookName" -}}
+suse-observability-pull-secret-hook
+{{- end -}}
+
+{{/*
 Return the proper Docker Image Registry Secret Names evaluating values as templates
 {{ include "stackstate.image.pullSecret.name" ( dict "images" (list .Values.path.to.the.image1, .Values.path.to.the.image2) "context" $) }}
+Pass "autoSecretName" to override the automatically-included secret name, e.g. for hook Jobs that must
+reference the hook-managed pull secret:
+{{ include "stackstate.image.pullSecret.name" ( dict "context" $ "autoSecretName" (include "suse-observability.pullSecret.hookName" $)) }}
 */}}
 {{- define "stackstate.image.pullSecret.name" -}}
   {{- $pullSecrets := list }}
   {{- $context := .context }}
+  {{- $autoSecretName := .autoSecretName | default (include "suse-observability.pullSecret.name" $context) }}
 
   {{- if $context.Values.global }}
     {{- range $context.Values.global.imagePullSecrets -}}
@@ -622,9 +651,9 @@ Return the proper Docker Image Registry Secret Names evaluating values as templa
     {{- $pullSecrets = append $pullSecrets (include "stackstate.tplvalue.render" (dict "value" .name "context" $context)) -}}
   {{- end -}}
 
-  {{- /* Automatically include suse-observability-pull-secret if configured via global.suseObservability */ -}}
+  {{- /* Automatically include the SUSE Observability pull secret if configured via global.suseObservability */ -}}
   {{- if include "suse-observability.global.hasPullSecret" $context -}}
-    {{- $pullSecrets = append $pullSecrets "suse-observability-pull-secret" -}}
+    {{- $pullSecrets = append $pullSecrets $autoSecretName -}}
   {{- end -}}
 
   {{- if (not (empty $pullSecrets)) }}
@@ -773,17 +802,56 @@ Init container to load stackpacks from docker image
 */}}
 {{- define "stackstate.initContainer.stackpacks" -}}
 {{- $commonContainer := fromYaml (include "common.container" .) -}}
-name: init-stackpacks
+{{- $firstImage := first .Values.stackstate.stackpacks.images -}}
 {{- $stackpacksv2 := .Values.global.features.experimentalStackpacks | ternary "-2_0" "" -}}
-{{- $deploymentMode := .Values.stackstate.stackpacks.image.deploymentModeOverride | default .Values.stackstate.deployment.mode | lower -}}
-{{- $tag := printf "%s%s-%s-%s" .Values.stackstate.stackpacks.image.version $stackpacksv2 (lower .Values.stackstate.deployment.edition) $deploymentMode }}
-image: "{{ include "stackstate.stackpacks.image.registry" . }}/{{ .Values.stackstate.stackpacks.image.repository }}:{{ $tag }}"
-imagePullPolicy: {{ .Values.stackstate.stackpacks.image.pullPolicy | quote }}
-args: ["/var/stackpacks"]
-volumeMounts:
-{{ include "stackstate.stackpacks.volumeMount" . }}
-securityContext:
+{{- $images := concat .Values.stackstate.stackpacks.images (.Values.stackstate.stackpacks.extraImages | default list) -}}
+{{- range $images }}
+{{- $image := . -}}
+{{- $imageEnabled := true -}}
+{{- if hasKey $image "enabled" -}}
+{{- $imageEnabled = $image.enabled -}}
+{{- end -}}
+{{- $editions := .editions | default (list "Prime" "Community") -}}
+{{- $deriveTag := hasKey $image "version" }}
+{{- if $imageEnabled }}
+{{- range $editions }}
+{{- if (eq $.Values.stackstate.deployment.edition .) }}
+{{- if (or $.Values.global.features.experimentalStackpacks $deriveTag) }}
+{{- $deploymentMode := $image.deploymentModeOverride | default $.Values.stackstate.deployment.mode | lower -}}
+{{- $tag := ternary
+    (printf "%s%s-%s-%s" $image.version $stackpacksv2 (lower $.Values.stackstate.deployment.edition) $deploymentMode)
+    $image.tag
+    $deriveTag
+}}
+- name: init-stackpacks-{{ $image.name }}
+  image: "{{ include "common.image.registry" ( dict "image" $image "context" $) }}/{{ $image.repository }}:{{ $tag }}"
+  imagePullPolicy: {{ $image.pullPolicy | quote }}
+  command:
+    - /bin/sh
+    - /stackpack-scripts/copy-stackpacks.sh
+  args:
+    - "/var/stackpacks"
+{{- if eq $image.name $firstImage.name }}
+    - "--clear"
+{{- end }}
+  volumeMounts:
+{{ include "stackstate.stackpacks.volumeMount" $image | nindent 2 }}
+  - name: stackpack-scripts
+    mountPath: /stackpack-scripts
+  securityContext:
   {{- $commonContainer.securityContext | toYaml | nindent 8 }}
+{{- end }}
+{{- end }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "stackstate.stackpacks.scripts.volume" -}}
+- name: stackpack-scripts
+  configMap:
+    name: {{ template "common.fullname.short" . }}-stackpacks-scripts
+    defaultMode: 0555
 {{- end -}}
 
 {{/*
@@ -925,6 +993,14 @@ Logic:
 true
   {{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Returns the otel-collector service name. The subchart uses fullnameOverride for a stable name
+independent of the Helm release name; the router must use this rather than common.fullname.short.
+*/}}
+{{- define "stackstate.otelCollector.fullname" -}}
+{{- index .Values "opentelemetry-collector" "fullnameOverride" | default "suse-observability-otel-collector" -}}
 {{- end -}}
 
 {{/*

@@ -1,0 +1,621 @@
+# CI: build / validate / test for every push; publish-to-internal on master + chart-tag pushes.
+# Pipeline: detect_changes → build → validate + test → push_to_internal (gated; idempotent).
+#
+# Cutover complete: GitHub is the sole publisher. Push-event DRY_RUN default is 'false';
+# workflow_dispatch still defaults to dry-run so operators can re-run safely without
+# accidentally re-publishing. GitLab CI's push-charts-to-internal must be disabled to
+# avoid double-publish.
+name: CI
+
+on:
+  push: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip destructive publish steps (cm-push, version-rewriting, tag/bump push-back)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v3.1.2
+  CGO_ENABLED: "0"
+  GOPATH: /go
+  # GH-expression gotcha: STRING 'false' is truthy, BOOLEAN false is falsy — hence the
+  # `(inputs.dry_run && 'true' || 'false')` coercion. Trailing literal is the push-event default.
+  DRY_RUN: >-
+    ${{ github.event_name == 'workflow_dispatch'
+        && (inputs.dry_run && 'true' || 'false')
+        || 'false' }}
+
+jobs:
+  # Emits per-chart matrices (stable, local) + the `resource_usage_changed` flag — single
+  # up-front diff, downstream jobs fan out from its outputs.
+  detect_changes:
+    if: github.repository == 'StackVista/helm-charts-internal'
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    outputs:
+      stable: ${{ steps.d.outputs.stable }}
+      local: ${{ steps.d.outputs.local }}
+      resource_usage_changed: ${{ steps.d.outputs.resource_usage_changed }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run prerelease bump helper tests
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            require(`${process.env.GITHUB_WORKSPACE}/scripts/ci/bump-suse-prerelease.test.cjs`);
+      - id: d
+        uses: ./.github/actions/detect-changes
+
+  # Builds each affected stable chart dependencies, runs a package smoke test in /tmp,
+  # and uploads `charts/` as the `build-<chart>` artifact reused downstream.
+  build_stable:
+    needs: detect_changes
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.stable != '[]') }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.stable) }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure helm repos and fetch deps
+        run: |
+          helm repo add deliveryhero    https://charts.deliveryhero.io
+          helm repo add opentelemetry   https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add stackstate      https://helm.stackstate.io
+          helm repo add victoriametrics https://victoriametrics.github.io/helm-charts
+          helm repo update
+      - name: Build 2nd-degree file:// deps
+        run: |
+          yq e '.dependencies[] | select (.repository == "file*").repository | sub("^file://","")' \
+            stable/${{ matrix.chart }}/Chart.yaml \
+            | xargs -I % helm dependencies build --skip-refresh stable/${{ matrix.chart }}/%
+      - name: Build chart
+        run: |
+          helm dependencies build stable/${{ matrix.chart }}
+          pkg_tmp_dir="$(mktemp -d)"
+          helm package --destination "$pkg_tmp_dir" stable/${{ matrix.chart }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: build-${{ matrix.chart }}
+          path: |
+            stable/${{ matrix.chart }}/charts/
+            stable/${{ matrix.chart }}/Chart.yaml
+
+  # Same shape as `build_stable` for charts under `local/` — consumed only as `file://`
+  # deps of stable parents, never published, so no `helm package`.
+  build_local:
+    needs: detect_changes
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.local != '[]') }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.local) }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure helm repos
+        run: |
+          helm repo add deliveryhero    https://charts.deliveryhero.io
+          helm repo add opentelemetry   https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add stackstate      https://helm.stackstate.io
+          helm repo add victoriametrics https://victoriametrics.github.io/helm-charts
+          helm repo update
+      - name: Build 2nd-degree deps
+        run: |
+          yq e '.dependencies[] | select (.repository == "file*").repository | sub("^file://","")' \
+            local/${{ matrix.chart }}/Chart.yaml \
+            | xargs -I % helm dependencies build --skip-refresh local/${{ matrix.chart }}/%
+      - name: Build chart
+        run: helm dependencies build local/${{ matrix.chart }}
+      # Multi-path upload: `charts/` is what consumers actually need, but it can be empty
+      # for leaf charts (no `dependencies:` in Chart.yaml). Adding `Chart.yaml` (always
+      # exists) ensures the artifact is never empty so `upload-artifact` doesn't warn and
+      # `download-artifact` doesn't fail. As a bonus, multi-path uploads preserve the
+      # parent directory in the artifact — consumers download into `local/<chart>/` and
+      # the layout is identical to the source tree (the same shape build_stable uses).
+      - uses: actions/upload-artifact@v6
+        with:
+          name: build-local-${{ matrix.chart }}
+          path: |
+            local/${{ matrix.chart }}/charts/
+            local/${{ matrix.chart }}/Chart.yaml
+
+  # yamale schema + yamllint + `helm lint` + local-dep-version check + kubeconform,
+  # against each stable chart's `build_stable` artifact.
+  validate_stable:
+    needs: [detect_changes, build_stable]
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.stable != '[]') }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/helmpack/chart-testing:v3.14.0
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.stable) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-${{ matrix.chart }}
+          path: stable/${{ matrix.chart }}/
+      - run: ./scripts/ci/validate_before_script.sh
+      - run: yamale --schema /etc/ct/chart_schema.yaml stable/${{ matrix.chart }}/Chart.yaml
+      - run: yamllint --config-file lintconf.yaml stable/${{ matrix.chart }}/Chart.yaml
+      - run: yamllint --config-file lintconf.yaml stable/${{ matrix.chart }}/values.yaml
+      - run: |
+          if [ -f stable/${{ matrix.chart }}/ci/default-values.yaml ]; then
+            yamllint --config-file lintconf.yaml stable/${{ matrix.chart }}/ci/default-values.yaml
+            helm lint stable/${{ matrix.chart }} --values stable/${{ matrix.chart }}/ci/default-values.yaml
+          fi
+      - run: ./scripts/ci/validate_local_dep_versions.sh stable/${{ matrix.chart }}
+      - run: ./scripts/ci/validate_kubeconform.sh stable/${{ matrix.chart }}
+
+  # `skopeo inspect` every image referenced by the chart, to catch typo'd tags / missing
+  # public mirrors. Only suse-observability + suse-observability-agent ship a list-images
+  # helper, so the matrix is hardcoded to those two; the inner `if:` skips when the chart
+  # isn't in the current diff.
+  validate_stable_images:
+    needs: [detect_changes, build_stable]
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (contains(needs.detect_changes.outputs.stable, '"suse-observability"') || contains(needs.detect_changes.outputs.stable, '"suse-observability-agent"')) }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-devops-d4e06284
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [suse-observability, suse-observability-agent]
+    steps:
+      - uses: actions/checkout@v5
+      # validator runs `helm template`/`show`, which needs subcharts materialised — pull
+      # build_stable's artifact down before running it.
+      - uses: actions/download-artifact@v7
+        if: contains(needs.detect_changes.outputs.stable, format('"{0}"', matrix.chart))
+        with:
+          name: build-${{ matrix.chart }}
+          path: stable/${{ matrix.chart }}/
+      - if: contains(needs.detect_changes.outputs.stable, format('"{0}"', matrix.chart))
+        run: ./scripts/ci/validate_quoted_tags.sh stable/${{ matrix.chart }}
+      - if: contains(needs.detect_changes.outputs.stable, format('"{0}"', matrix.chart))
+        run: ./scripts/ci/validate_chart_images.sh stable/${{ matrix.chart }}
+
+  # Same lint/schema/kubeconform as `validate_stable`, for local charts. No version-bump
+  # check — local charts are pinned to `version: "*"` by consumers and never bumped on their own.
+  validate_local:
+    needs: [detect_changes, build_local]
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.local != '[]') }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/helmpack/chart-testing:v3.14.0
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.local) }}
+    steps:
+      - uses: actions/checkout@v5
+      # build_local's multi-path artifact (charts/ + Chart.yaml) preserves `local/<chart>/`
+      # parent dir when downloaded into that path. Same pattern as validate_stable.
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-local-${{ matrix.chart }}
+          path: local/${{ matrix.chart }}/
+      - run: ./scripts/ci/validate_before_script.sh
+      - run: yamale --schema /etc/ct/chart_schema.yaml local/${{ matrix.chart }}/Chart.yaml
+      - run: yamllint --config-file lintconf.yaml local/${{ matrix.chart }}/Chart.yaml
+      - run: |
+          if [ -f local/${{ matrix.chart }}/values.yaml ]; then
+            yamllint --config-file lintconf.yaml local/${{ matrix.chart }}/values.yaml
+          fi
+          if [ -f local/${{ matrix.chart }}/ci/default-values.yaml ]; then
+            yamllint --config-file lintconf.yaml local/${{ matrix.chart }}/ci/default-values.yaml
+            helm lint local/${{ matrix.chart }} --values local/${{ matrix.chart }}/ci/default-values.yaml
+          fi
+      - run: ./scripts/ci/validate_local_dep_versions.sh local/${{ matrix.chart }}
+      - run: ./scripts/ci/validate_kubeconform.sh local/${{ matrix.chart }}
+
+  # Enforces that each affected chart's Chart.yaml version was bumped vs the target branch.
+  # suse-observability is exempt — its version is auto-bumped by the post-publish script,
+  # not by humans (step-level `if:` skips it; otherwise chartmuseum would 409 the push).
+  check_chart_version:
+    needs: detect_changes
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.stable != '[]') }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/helmpack/chart-testing:v3.14.0
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.stable) }}
+    env:
+      TARGET_BRANCH: ${{ github.base_ref || 'master' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - if: matrix.chart != 'suse-observability'
+        run: |
+          ./scripts/ci/validate_before_script.sh
+          ./scripts/ci/verify_versions_bumped.sh ${{ matrix.chart }}
+
+  # Terratest helm-template tests for each affected stable chart on `xlarge`. Skips
+  # with a notice for charts without a `test/` directory.
+  test_stable:
+    needs: [detect_changes, build_stable]
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.stable != '[]') }}
+    runs-on: xlarge
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.stable) }}
+    steps:
+      - uses: actions/checkout@v5
+      # Terratest's `helm.RenderTemplate` needs subcharts materialised — pull
+      # build_stable's artifact down before running.
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-${{ matrix.chart }}
+          path: stable/${{ matrix.chart }}/
+      - run: apk add --no-cache tar   # GNU tar — actions/cache@v5 uses `tar --posix`, busybox lacks it
+      - uses: actions/cache@v5
+        with:
+          path: /go/pkg/mod/
+          key: gomod-${{ hashFiles('go.mod', 'go.sum') }}
+      # `ls <glob> >/dev/null 2>&1` is the POSIX-portable "does any file match?" — busybox
+      # `sh` (Alpine default) has no `compgen`. `-v` on go test streams live test progress.
+      - run: |
+          if ls stable/${{ matrix.chart }}/test/*.go >/dev/null 2>&1; then
+            go mod download
+            go test -v ./stable/${{ matrix.chart }}/test/...
+          else
+            echo "::notice::no tests for ${{ matrix.chart }}, skipping"
+          fi
+
+  # Same as `test_stable`, scoped to `./local/<chart>/test/...`.
+  test_local:
+    needs: [detect_changes, build_local]
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.local != '[]') }}
+    runs-on: xlarge
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.local) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-local-${{ matrix.chart }}
+          path: local/${{ matrix.chart }}/
+      - run: apk add --no-cache tar   # GNU tar — actions/cache@v5 uses `tar --posix`, busybox lacks it
+      - uses: actions/cache@v5
+        with:
+          path: /go/pkg/mod/
+          key: gomod-${{ hashFiles('go.mod', 'go.sum') }}
+      - run: |
+          if ls local/${{ matrix.chart }}/test/*.go >/dev/null 2>&1; then
+            go mod download
+            go test -v ./local/${{ matrix.chart }}/test/...
+          else
+            echo "::notice::no tests for ${{ matrix.chart }}, skipping"
+          fi
+
+  # Runs `go test ./test/...` (the repo-root resource-usage suite) and uploads
+  # `test/resource_usage.txt` — the historical record of projected pod/CPU/memory footprint.
+  # Gated on `resource_usage_changed` from `detect_changes`.
+  resource_usage:
+    needs: detect_changes
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (needs.detect_changes.outputs.resource_usage_changed == 'true') }}
+    runs-on: xlarge
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-helm-test-4423bdaa
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: apk add --no-cache tar   # GNU tar — actions/cache@v5 uses `tar --posix`, busybox lacks it
+      - uses: actions/cache@v5
+        with:
+          path: /go/pkg/mod/
+          key: gomod-${{ hashFiles('go.mod', 'go.sum') }}
+      - name: Configure helm repos
+        run: |
+          helm repo add deliveryhero    https://charts.deliveryhero.io
+          helm repo add opentelemetry   https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add stackstate      https://helm.stackstate.io
+          helm repo add victoriametrics https://victoriametrics.github.io/helm-charts
+          helm repo update
+      - run: |
+          yq e '.dependencies[] | select (.repository == "file*").repository | sub("^file://","")' \
+            stable/suse-observability/Chart.yaml \
+            | xargs -I % helm dependencies build --skip-refresh stable/suse-observability/%
+          helm dependencies build stable/suse-observability
+          helm dependencies build stable/suse-observability-values
+          go mod download
+          go test -v ./test/...
+      - uses: actions/upload-artifact@v6
+        with:
+          name: resource-usage
+          path: test/resource_usage.txt
+
+  # Pushes each built chart to the internal chartmuseum. Step-level DRY_RUN gating leaves
+  # the auth + setup path exercised on every push, so cutover-day isn't the first time the
+  # full path runs together. suse-observability has extras: tag-path rewrites the release
+  # version before push; master-path tags + bumps the prerelease after push.
+  push_to_internal:
+    needs:
+      - detect_changes
+      - build_stable
+      - validate_stable
+      - validate_stable_images
+      - check_chart_version
+      - test_stable
+    # `always()` lets us treat `validate_stable_images: skipped` as OK (it correctly skips when
+    # neither suse-observability nor agent is in the diff). The rest must have succeeded.
+    if: |
+      github.repository == 'StackVista/helm-charts-internal' &&
+      always() &&
+      needs.build_stable.result == 'success' &&
+      needs.validate_stable.result == 'success' &&
+      (needs.validate_stable_images.result == 'success' || needs.validate_stable_images.result == 'skipped') &&
+      needs.check_chart_version.result == 'success' &&
+      needs.test_stable.result == 'success' &&
+      (github.event_name == 'workflow_dispatch'
+        || github.ref == 'refs/heads/master'
+        || startsWith(github.ref, 'refs/tags/suse-observability/')) &&
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      needs.detect_changes.outputs.stable != '[]'
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-devops-d4e06284
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect_changes.outputs.stable) }}
+    env:
+      CHART: stable/${{ matrix.chart }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          name: build-${{ matrix.chart }}
+          path: stable/${{ matrix.chart }}/
+
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.HELM_CHARTS_INTERNAL_GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HELM_CHARTS_INTERNAL_GH_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # GitLab equivalent: `before_script: helm_fetch_dependencies` on push_chart_job —
+      # each job gets its own container, so helm repo state from build_stable doesn't carry over.
+      - name: Configure helm repos
+        run: |
+          helm repo add deliveryhero    https://charts.deliveryhero.io
+          helm repo add opentelemetry   https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add stackstate      https://helm.stackstate.io
+          helm repo add victoriametrics https://victoriametrics.github.io/helm-charts
+          helm repo update
+
+      - name: suse-observability — extra before-script (tag path)
+        # Mutates Chart.yaml; only meaningful when followed by the cm-push, so gated together.
+        # Release tags only (suse-observability/x.y.z). Prerelease provenance tags
+        # (prerelease/suse-observability/x.y.z-pre.N) are already published on the master
+        # run and must not re-enter this release-shaped path; set_chart_release_version.sh
+        # rejects x.y.z-pre.N.
+        if: env.DRY_RUN == 'false' && matrix.chart == 'suse-observability' && startsWith(github.ref, 'refs/tags/suse-observability/')
+        env:
+          GH_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          ./scripts/ci/configure_git.sh
+          version="${GITHUB_REF_NAME#suse-observability/}"
+          ./scripts/ci/set_chart_release_version.sh stable/suse-observability "$version"
+
+      # Only suse-observability has nested file:// deps that need walking before `helm dep update`.
+      - name: Build 2nd-degree file:// deps (suse-observability only)
+        if: matrix.chart == 'suse-observability'
+        run: |
+          yq e '.dependencies[] | select (.repository == "file*").repository | sub("^file://","")' \
+            "$CHART/Chart.yaml" \
+            | xargs -I % helm dependencies build --skip-refresh "$CHART/%"
+
+      - name: helm deps update
+        # Always run — writes only to local charts/ + Chart.lock; exercises helm repo auth.
+        run: |
+          helm dependencies update --skip-refresh "$CHART"
+
+      # Idempotency: chartmuseum 409s on duplicate uploads. Pre-check via API so re-pushes
+      # of an already-published version skip cleanly instead of failing the step.
+      - name: Check chart version in internal chartmuseum
+        id: chart_exists
+        if: env.DRY_RUN == 'false'
+        env:
+          CHARTMUSEUM_USERNAME: ${{ secrets.CHARTMUSEUM_INTERNAL_USERNAME }}
+          CHARTMUSEUM_PASSWORD: ${{ secrets.CHARTMUSEUM_INTERNAL_PASSWORD }}
+          CHARTMUSEUM_URL:      ${{ secrets.CHARTMUSEUM_INTERNAL_URL }}
+        run: |
+          chart_name=$(yq '.name'    "$CHART/Chart.yaml")
+          chart_version=$(yq '.version' "$CHART/Chart.yaml")
+          http_status=$(curl -sw "%{http_code}" -o /dev/null \
+            -u "${CHARTMUSEUM_USERNAME}:${CHARTMUSEUM_PASSWORD}" \
+            "${CHARTMUSEUM_URL}/api/charts/${chart_name}/${chart_version}")
+          case "$http_status" in
+            200) echo "exists=true"  >> "$GITHUB_OUTPUT"
+                 echo "::notice::${chart_name} ${chart_version} already in internal chartmuseum; skipping cm-push"
+                 ;;
+            404) echo "exists=false" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "::error::Unexpected HTTP $http_status from chartmuseum"
+                 exit 1 ;;
+          esac
+
+      - name: cm-push to internal
+        id: cm_push
+        if: env.DRY_RUN == 'false' && steps.chart_exists.outputs.exists == 'false'
+        # Secrets via env vars (NOT `${{ }}`-inlined): GH Actions interpolates BEFORE bash
+        # parses, so a `$`/backtick/`\` in the value gets shell-re-interpreted and silently
+        # mangles the password. Env-var expansion (`"$VAR"`) is single-pass and safe.
+        env:
+          CHARTMUSEUM_USERNAME: ${{ secrets.CHARTMUSEUM_INTERNAL_USERNAME }}
+          CHARTMUSEUM_PASSWORD: ${{ secrets.CHARTMUSEUM_INTERNAL_PASSWORD }}
+          CHARTMUSEUM_URL:      ${{ secrets.CHARTMUSEUM_INTERNAL_URL }}
+        run: |
+          helm cm-push \
+            --username "$CHARTMUSEUM_USERNAME" \
+            --password "$CHARTMUSEUM_PASSWORD" \
+            "$CHART" "$CHARTMUSEUM_URL"
+
+      - name: Verify chart version in internal chartmuseum
+        if: env.DRY_RUN == 'false' && steps.cm_push.outcome == 'success'
+        env:
+          CHARTMUSEUM_USERNAME: ${{ secrets.CHARTMUSEUM_INTERNAL_USERNAME }}
+          CHARTMUSEUM_PASSWORD: ${{ secrets.CHARTMUSEUM_INTERNAL_PASSWORD }}
+          CHARTMUSEUM_URL:      ${{ secrets.CHARTMUSEUM_INTERNAL_URL }}
+        run: |
+          set -euo pipefail
+          chart_name=$(yq '.name' "$CHART/Chart.yaml")
+          chart_version=$(yq '.version' "$CHART/Chart.yaml")
+          for attempt in 1 2 3 4 5; do
+            http_status=$(curl -sw "%{http_code}" -o /dev/null \
+              -u "${CHARTMUSEUM_USERNAME}:${CHARTMUSEUM_PASSWORD}" \
+              "${CHARTMUSEUM_URL}/api/charts/${chart_name}/${chart_version}")
+            if [ "$http_status" = "200" ]; then
+              echo "::notice::${chart_name} ${chart_version} visible in internal chartmuseum"
+              exit 0
+            fi
+            echo "::notice::${chart_name} ${chart_version} not visible yet, retrying (${attempt}/5)"
+            sleep 5
+          done
+          echo "::error::${chart_name} ${chart_version} was pushed but did not become visible in internal chartmuseum"
+          exit 1
+
+      - name: suse-observability — prerelease after-script state (master path)
+        id: sts_prerelease_state
+        if: env.DRY_RUN == 'false' && matrix.chart == 'suse-observability' && github.ref == 'refs/heads/master'
+        env:
+          CHART_EXISTS: ${{ steps.chart_exists.outputs.exists }}
+          GH_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          ./scripts/ci/configure_git.sh
+          chart_version=$(yq '.version' "$CHART/Chart.yaml")
+          tag="prerelease/suse-observability/${chart_version}"
+          after_script=false
+          reason="published-chart-belongs-to-another-commit"
+
+          if [ "${CHART_EXISTS}" = "false" ]; then
+            after_script=true
+            reason="new-chart-package-published"
+          else
+            tag_target=$(git ls-remote --tags https://github.com/StackVista/helm-charts-internal.git "refs/tags/${tag}^{}" | awk '{print $1}')
+            if [ -z "$tag_target" ]; then
+              tag_target=$(git ls-remote --tags https://github.com/StackVista/helm-charts-internal.git "refs/tags/${tag}" | awk '{print $1}')
+            fi
+
+            if [ -z "$tag_target" ]; then
+              echo "::error::suse-observability ${chart_version} exists in internal chartmuseum, but ${tag} is missing. Refusing to tag/bump because the published package provenance is unknown."
+              exit 1
+            elif [ "$tag_target" = "$GITHUB_SHA" ]; then
+              after_script=true
+              reason="published-chart-tag-points-at-current-run"
+            else
+              echo "::error::${tag} points at ${tag_target}, not ${GITHUB_SHA}; refusing to tag/bump this stale chart-version run"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "after_script=${after_script}"
+            echo "reason=${reason}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::suse-observability prerelease after-script=${after_script} (${reason})"
+
+      - name: suse-observability — tag prerelease (master path)
+        # Tags the just-published prerelease on the current HEAD. Idempotent:
+        # tag_sts_chart_pre_release.sh no-ops if the tag already exists, so the
+        # after-script can self-heal if a previous run died after tagging but
+        # before bumping. The state step refuses ambiguous or stale duplicate
+        # packages so newer master content cannot be bumped without publishing.
+        if: env.DRY_RUN == 'false' && matrix.chart == 'suse-observability' && github.ref == 'refs/heads/master' && steps.sts_prerelease_state.outputs.after_script == 'true'
+        env:
+          GH_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          ./scripts/ci/configure_git.sh
+          ./scripts/ci/tag_sts_chart_pre_release.sh suse-observability
+      - name: suse-observability — bump prerelease (master path)
+        # Advances the prerelease version with one App-signed commit via the API
+        # (createCommitOnBranch), retrying if master moved. App-authored commits
+        # are GitHub-signed and bypass branch protection (per pulumi-infra).
+        # Keep this `if:` identical to the tag step above — they're one logical
+        # unit (tag then bump); a desync could bump without a matching tag.
+        if: env.DRY_RUN == 'false' && matrix.chart == 'suse-observability' && github.ref == 'refs/heads/master' && steps.sts_prerelease_state.outputs.after_script == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            await require(`${process.env.GITHUB_WORKSPACE}/scripts/ci/bump-suse-prerelease.cjs`)
+              ({ github, core, chart: 'stable/suse-observability', publishedHead: process.env.GITHUB_SHA });

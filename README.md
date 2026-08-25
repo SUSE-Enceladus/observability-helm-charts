@@ -2,6 +2,12 @@
 
 StackState curated applications for Kubernetes.
 
+## CI/CD
+
+GitHub Actions workflows live under `.github/workflows/`.
+
+The public [`StackVista/helm-charts`](https://github.com/StackVista/helm-charts) repository is kept in sync from this internal repository by the [public sync workflow](.github/workflows/sync-public.yml).
+
 ## Pre-commit hooks
 
 This Helm repository has pre-commit hooks for Helm specific needs:

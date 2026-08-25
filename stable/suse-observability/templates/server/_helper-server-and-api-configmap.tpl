@@ -108,14 +108,18 @@ stackstate.stackPacks {
     {{- end }}
   }
 {{- end }}
-{{/*
+{{- /*
   Default StackPacks that will be upgraded on startup - to keep them in sync with SUSE Observability upgrades.
   Users can extend this list by setting: stackstate.stackpacks.upgradeOnStartup
-*/}}
-  {{ $defaultStackPacksToUpgrade := list "kubernetes-v2" "stackstate-k8s-agent-v2" "open-telemetry" "aad-v2" "stackstate" -}}
-  {{ $stackpacks2ToUpgrade := .Values.global.features.experimentalStackpacks | ternary (list "open-telemetry-2") (list) -}}
-  {{ $userStackPacksToUpgrade := .Values.stackstate.stackpacks.upgradeOnStartup | default list -}}
-  {{ $upgradeList := concat $defaultStackPacksToUpgrade $stackpacks2ToUpgrade $userStackPacksToUpgrade | uniq -}}
+*/ -}}
+{{- $defaultStackPacksToUpgrade := list "kubernetes-v2" "stackstate-k8s-agent-v2" "open-telemetry" "aad-v2" -}}
+{{- /* stackstate (v1) upgrades while the v2 feature flag is off; suse-observability (v2) takes over when enabled,
+       running the cross-name migration via successorMapping. Both must not be in the list simultaneously to
+       avoid concurrent upgrade tasks racing on the same config records. */ -}}
+{{- $stackpacks2ToUpgrade := .Values.global.features.experimentalStackpacks | ternary (list "otel-k8s-crd" "suse-observability") (list "stackstate") -}}
+{{- $userStackPacksToUpgrade := .Values.stackstate.stackpacks.upgradeOnStartup | default list -}}
+{{- $upgradeList := concat $defaultStackPacksToUpgrade $stackpacks2ToUpgrade $userStackPacksToUpgrade | uniq }}
+
   upgradeOnStartUp = {{ toJson $upgradeList }}
 
   {{- $editionStackPack := printf "%s-kubernetes" (lower .Values.stackstate.deployment.edition) }}
@@ -349,6 +353,22 @@ for production this should be replaced with one of the other mechanisms.
 
 {{- $defaultSessionLifetime := ternary "16h" "7d" (not (empty $apiAuth.rancher))  }}
 {{ $authnPrefix }}.sessionLifetime =  {{ $apiAuth.sessionLifetime | default $defaultSessionLifetime | toJson }}
+{{- /* oidcLogout and skipLoginPage only apply to OIDC-based providers (oidc, keycloak, rancher). */ -}}
+{{- /* Read them from the active provider block so non-OIDC providers (ldap, file, admin) always render false. */ -}}
+{{- $oidcLogout := false -}}
+{{- $skipLoginPage := false -}}
+{{- if $apiAuth.keycloak -}}
+{{- $oidcLogout = $apiAuth.keycloak.oidcLogout | default false -}}
+{{- $skipLoginPage = $apiAuth.keycloak.skipLoginPage | default false -}}
+{{- else if $apiAuth.oidc -}}
+{{- $oidcLogout = $apiAuth.oidc.oidcLogout | default false -}}
+{{- $skipLoginPage = $apiAuth.oidc.skipLoginPage | default false -}}
+{{- else if $apiAuth.rancher -}}
+{{- $oidcLogout = $apiAuth.rancher.oidcLogout | default false -}}
+{{- $skipLoginPage = $apiAuth.rancher.skipLoginPage | default false -}}
+{{- end }}
+{{ $authnPrefix }}.oidcLogout = {{ $oidcLogout }}
+{{ $authnPrefix }}.skipLoginPage = {{ $skipLoginPage }}
 
 {{- range $k, $v := $apiAuth.roles.custom }}
 {{ $authzPrefix }}.staticSubjects.{{ $k | quote }}: { systemPermissions: {{ $v.systemPermissions | toJson }}{{ if $v.resourcePermissions }}, resourcePermissions: {{ $v.resourcePermissions | toJson }}{{end}}{{ if $v.viewPermissions }}, viewPermissions: {{ $v.viewPermissions | toJson }}{{end}}{{ if $v.topologyScope }}, query: {{ $v.topologyScope | quote }}{{end}} }

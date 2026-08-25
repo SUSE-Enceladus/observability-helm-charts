@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/StackVista/DevOps/helm-charts/helmtestutil"
 	batchv1 "k8s.io/api/batch/v1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -33,12 +34,14 @@ var backupManuallyEnabledCronjobs = []string{
 
 var backupManuallyEnabledDeployments = []string{}
 
-// S3Proxy is always enabled for settings backup, so the s3proxy deployment is always present
+// S3Proxy renders whenever settings backup is enabled (default true), so with default
+// values it is present even when global.backup.enabled=false. It is NOT truly "always"
+// enabled — see TestAllBackupsDisabledNoS3Proxy for the case where it disappears.
 var backupAlwaysEnabledDeployments = []string{
 	"suse-observability-s3proxy",
 }
 
-// S3Proxy-related resources that are always present
+// S3Proxy-related resources present under the default values (settings backup enabled).
 var backupAlwaysEnabledSecrets = []string{
 	"suse-observability-s3proxy",
 }
@@ -430,6 +433,167 @@ func TestBackupConfigmapDistributedModeNoPvc(t *testing.T) {
 	assert.Nil(t, stackpacks["pvc"], "stackpacks.pvc should not be present in Distributed mode")
 }
 
+// TestAllBackupsDisabledNoS3Proxy verifies that when both global.backup.enabled and
+// backup.configuration.enabled (settings backup) are false, no backup component
+// is enabled and s3proxy (with all its dependent resources) does not render at all.
+func TestAllBackupsDisabledNoS3Proxy(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles: []string{"values/full.yaml"},
+		SetValues: map[string]string{
+			"global.backup.enabled":        "false",
+			"backup.configuration.enabled": "false",
+		},
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	_, ok := resources.Deployments["suse-observability-s3proxy"]
+	assert.False(t, ok, "S3Proxy deployment should NOT exist when all backups are disabled")
+
+	_, ok = resources.Services["suse-observability-s3proxy"]
+	assert.False(t, ok, "S3Proxy service should NOT exist when all backups are disabled")
+
+	_, ok = resources.Secrets["suse-observability-s3proxy"]
+	assert.False(t, ok, "S3Proxy secret should NOT exist when all backups are disabled")
+
+	_, ok = resources.ConfigMaps["suse-observability-s3proxy-config"]
+	assert.False(t, ok, "S3Proxy ConfigMap should NOT exist when all backups are disabled")
+
+	_, ok = resources.PersistentVolumeClaims["suse-observability-backup-settings-data"]
+	assert.False(t, ok, "Settings backup data PVC should NOT exist when all backups are disabled")
+
+	_, ok = resources.PersistentVolumeClaims["suse-observability-minio"]
+	assert.False(t, ok, "Main data PVC should NOT exist when all backups are disabled")
+
+	for _, cronjob := range []string{
+		"suse-observability-backup-sg",
+		"suse-observability-backup-conf",
+		"suse-observability-clickhouse-full-backup",
+		"suse-observability-clickhouse-incremental-backup",
+	} {
+		_, ok = resources.CronJobs[cronjob]
+		assert.False(t, ok, "%s CronJob should NOT exist when all backups are disabled", cronjob)
+	}
+}
+
+// TestSettingsOnlyBackupRendersS3Proxy verifies that settings/configuration backup alone
+// (global.backup.enabled=false, backup.configuration.enabled=true) is enough to
+// keep s3proxy and the settings backup CronJob rendering, while remote-only backups stay off.
+func TestSettingsOnlyBackupRendersS3Proxy(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles: []string{"values/full.yaml"},
+		SetValues: map[string]string{
+			"global.backup.enabled":        "false",
+			"backup.configuration.enabled": "true",
+		},
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	_, ok := resources.Deployments["suse-observability-s3proxy"]
+	assert.True(t, ok, "S3Proxy deployment should exist when settings backup alone is enabled")
+
+	_, ok = resources.CronJobs["suse-observability-backup-conf"]
+	assert.True(t, ok, "backup-conf CronJob should exist when settings backup alone is enabled")
+
+	_, ok = resources.CronJobs["suse-observability-backup-sg"]
+	assert.False(t, ok, "backup-sg CronJob should NOT exist when global.backup.enabled=false")
+
+	for _, cronjob := range []string{
+		"suse-observability-clickhouse-full-backup",
+		"suse-observability-clickhouse-incremental-backup",
+	} {
+		_, ok = resources.CronJobs[cronjob]
+		assert.False(t, ok, "%s CronJob should NOT exist when global.backup.enabled=false", cronjob)
+	}
+
+	_, ok = resources.PersistentVolumeClaims["suse-observability-minio"]
+	assert.False(t, ok, "Main data PVC should NOT exist when global.backup.enabled=false")
+}
+
+// TestStackGraphBackupDisabled verifies that disabling backup.stackGraph.enabled
+// removes only the stackgraph backup CronJob, leaving settings backup and s3proxy intact.
+func TestStackGraphBackupDisabled(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles: []string{"values/full.yaml"},
+		SetValues: map[string]string{
+			"global.backup.enabled":     "true",
+			"backup.stackGraph.enabled": "false",
+		},
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	_, ok := resources.CronJobs["suse-observability-backup-sg"]
+	assert.False(t, ok, "backup-sg CronJob should NOT exist when backup.stackGraph.enabled=false")
+
+	_, ok = resources.CronJobs["suse-observability-backup-conf"]
+	assert.True(t, ok, "backup-conf CronJob should exist")
+
+	_, ok = resources.Deployments["suse-observability-s3proxy"]
+	assert.True(t, ok, "S3Proxy deployment should exist")
+}
+
+// TestClickHouseBackupDisabled verifies that disabling clickhouse.backup.enabled removes
+// only the ClickHouse backup CronJobs, leaving other backup components and s3proxy intact.
+func TestClickHouseBackupDisabled(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles: []string{"values/full.yaml"},
+		SetValues: map[string]string{
+			"global.backup.enabled":     "true",
+			"clickhouse.backup.enabled": "false",
+		},
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	for _, cronjob := range []string{
+		"suse-observability-clickhouse-full-backup",
+		"suse-observability-clickhouse-incremental-backup",
+	} {
+		_, ok := resources.CronJobs[cronjob]
+		assert.False(t, ok, "%s CronJob should NOT exist when clickhouse.backup.enabled=false", cronjob)
+	}
+
+	_, ok := resources.Deployments["suse-observability-s3proxy"]
+	assert.True(t, ok, "S3Proxy deployment should exist")
+
+	_, ok = resources.CronJobs["suse-observability-backup-sg"]
+	assert.True(t, ok, "backup-sg CronJob should exist")
+}
+
+// TestVictoriaMetricsBackupDisabledPerInstance verifies that disabling
+// victoria-metrics-0.backup.enabled removes only that instance's vmbackup sidecar container
+// from its StatefulSet, leaving victoria-metrics-1's vmbackup sidecar in place.
+func TestVictoriaMetricsBackupDisabledPerInstance(t *testing.T) {
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles: []string{"values/full.yaml"},
+		SetValues: map[string]string{
+			"global.backup.enabled":             "true",
+			"victoria-metrics-0.backup.enabled": "false",
+		},
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+
+	hasContainer := func(sts *corev1.PodSpec, name string) bool {
+		for _, c := range sts.Containers {
+			if c.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	vm0, ok := resources.Statefulsets["suse-observability-victoria-metrics-0"]
+	require.True(t, ok, "victoria-metrics-0 StatefulSet should exist")
+	assert.False(t, hasContainer(&vm0.Spec.Template.Spec, "vmbackup"), "victoria-metrics-0 should NOT have a vmbackup container when its backup is disabled")
+
+	vm1, ok := resources.Statefulsets["suse-observability-victoria-metrics-1"]
+	require.True(t, ok, "victoria-metrics-1 StatefulSet should exist")
+	assert.True(t, hasContainer(&vm1.Spec.Template.Spec, "vmbackup"), "victoria-metrics-1 should still have a vmbackup container")
+}
+
 func testJobsFromBackupRestoreScriptsConfigMap(t *testing.T, resources *helmtestutil.KubernetesResources) map[string]batchv1.Job {
 	// Find the backup-restore-scripts ConfigMap
 	var backupConfigMap *corev1.ConfigMap
@@ -468,4 +632,159 @@ func testJobsFromBackupRestoreScriptsConfigMap(t *testing.T, resources *helmtest
 		backupJobs[jobTemplateKey] = job
 	}
 	return backupJobs
+}
+
+// renderStackGraphBackupImplementation renders the chart with global backup enabled and the
+// given backup.stackGraph.scheduled.implementation value, returning the parsed resources.
+func renderStackGraphBackupImplementation(t *testing.T, implementation string) *helmtestutil.KubernetesResources {
+	setValues := map[string]string{
+		"global.backup.enabled": "true",
+	}
+	if implementation != "" {
+		setValues["backup.stackGraph.scheduled.implementation"] = implementation
+	}
+	output := helmtestutil.RenderHelmTemplateOptsNoError(t, "suse-observability", &helm.Options{
+		ValuesFiles:    []string{"values/full.yaml"},
+		SetValues:      setValues,
+		KubectlOptions: &k8s.KubectlOptions{Namespace: "suse-observability"},
+	})
+	resources := helmtestutil.NewKubernetesResources(t, output)
+	return &resources
+}
+
+// suspendValue returns the resolved value of a CronJob's spec.suspend (defaulting to false when unset).
+func suspendValue(cj batchv1beta1.CronJob) bool {
+	if cj.Spec.Suspend == nil {
+		return false
+	}
+	return *cj.Spec.Suspend
+}
+
+// TestStackGraphBackupImplementationV1 verifies that with the default/"v1" implementation both
+// StackGraph backup CronJobs are rendered, the v1 job is active and the v2 job is suspended.
+func TestStackGraphBackupImplementationV1(t *testing.T) {
+	for _, implementation := range []string{"", "v1"} {
+		t.Run("implementation="+implementation, func(t *testing.T) {
+			resources := renderStackGraphBackupImplementation(t, implementation)
+
+			v1, ok := resources.CronJobs["suse-observability-backup-sg"]
+			require.True(t, ok, "v1 StackGraph backup CronJob should exist")
+			v2, ok := resources.CronJobs["suse-observability-backup-sg-v2"]
+			require.True(t, ok, "v2 StackGraph backup CronJob should exist")
+
+			assert.False(t, suspendValue(v1), "v1 backup CronJob should be active when implementation=v1")
+			assert.True(t, suspendValue(v2), "v2 backup CronJob should be suspended when implementation=v1")
+		})
+	}
+}
+
+// TestStackGraphBackupImplementationV2 verifies that with implementation=v2 the v2 job is active
+// and the v1 job is suspended (both CronJobs are always rendered so the mode can be flipped
+// without re-provisioning resources).
+func TestStackGraphBackupImplementationV2(t *testing.T) {
+	resources := renderStackGraphBackupImplementation(t, "v2")
+
+	v1, ok := resources.CronJobs["suse-observability-backup-sg"]
+	require.True(t, ok, "v1 StackGraph backup CronJob should exist")
+	v2, ok := resources.CronJobs["suse-observability-backup-sg-v2"]
+	require.True(t, ok, "v2 StackGraph backup CronJob should exist")
+
+	assert.True(t, suspendValue(v1), "v1 backup CronJob should be suspended when implementation=v2")
+	assert.False(t, suspendValue(v2), "v2 backup CronJob should be active when implementation=v2")
+}
+
+// TestStackGraphBackupImplementationAll verifies that implementation=all keeps both StackGraph
+// backup CronJobs active simultaneously.
+func TestStackGraphBackupImplementationAll(t *testing.T) {
+	resources := renderStackGraphBackupImplementation(t, "all")
+
+	v1, ok := resources.CronJobs["suse-observability-backup-sg"]
+	require.True(t, ok, "v1 StackGraph backup CronJob should exist")
+	v2, ok := resources.CronJobs["suse-observability-backup-sg-v2"]
+	require.True(t, ok, "v2 StackGraph backup CronJob should exist")
+
+	assert.False(t, suspendValue(v1), "v1 backup CronJob should be active when implementation=all")
+	assert.False(t, suspendValue(v2), "v2 backup CronJob should be active when implementation=all")
+}
+
+// TestStackGraphBackupV2UsesV2Script verifies the v2 CronJob runs the dedicated v2 backup script
+// and mounts its own scratch PVC (a small upload buffer, distinct from the v1 tmp-data PVC).
+func TestStackGraphBackupV2UsesV2Script(t *testing.T) {
+	resources := renderStackGraphBackupImplementation(t, "v2")
+
+	v2, ok := resources.CronJobs["suse-observability-backup-sg-v2"]
+	require.True(t, ok, "v2 StackGraph backup CronJob should exist")
+
+	containers := v2.Spec.JobTemplate.Spec.Template.Spec.Containers
+	require.NotEmpty(t, containers, "v2 backup CronJob should have a main container")
+	assert.Equal(t, []string{"/backup-restore-scripts/backup-stackgraph-v2.sh"}, containers[0].Command,
+		"v2 backup CronJob should run the v2 backup script")
+
+	// The v2 job mounts its dedicated scratch PVC.
+	foundClaim := false
+	for _, vol := range v2.Spec.JobTemplate.Spec.Template.Spec.Volumes {
+		if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName == "suse-observability-backup-stackgraph-v2-tmp-data" {
+			foundClaim = true
+		}
+	}
+	assert.True(t, foundClaim, "v2 backup CronJob should mount the v2 scratch PVC")
+
+	_, ok = resources.PersistentVolumeClaims["suse-observability-backup-stackgraph-v2-tmp-data"]
+	assert.True(t, ok, "v2 scratch PVC should be rendered")
+}
+
+// TestStackGraphBackupHBaseEnvResources verifies the HBase S3A env ConfigMap and Secret used by
+// the v2 backup are rendered when backup is enabled, carrying the bucket-scoped S3Proxy settings.
+func TestStackGraphBackupHBaseEnvResources(t *testing.T) {
+	resources := renderStackGraphBackupImplementation(t, "v2")
+
+	const hbaseEnvName = "suse-observability-backup-sts-hbase-backup"
+	// The escaped bucket name for the default "sts-stackgraph-backup" bucket (- -> __).
+	const endpointKey = "HBASE_CONF_fs_s3a_bucket_sts__stackgraph__backup_endpoint"
+	const accessKeyKey = "HBASE_CONF_fs_s3a_bucket_sts__stackgraph__backup_access_key"
+
+	configMap, ok := resources.ConfigMaps[hbaseEnvName]
+	require.True(t, ok, "HBase backup env ConfigMap should exist")
+	assert.Contains(t, configMap.Data, endpointKey, "HBase env ConfigMap should carry the bucket-scoped S3A endpoint")
+	assert.Equal(t, "suse-observability-s3proxy:9000", configMap.Data[endpointKey],
+		"HBase env ConfigMap should point the backup bucket at the S3Proxy endpoint")
+
+	secret, ok := resources.Secrets[hbaseEnvName]
+	require.True(t, ok, "HBase backup env Secret should exist")
+	_, hasAccessKey := secret.StringData[accessKeyKey]
+	assert.True(t, hasAccessKey, "HBase env Secret should carry the bucket-scoped S3A access key")
+}
+
+// assertHBaseEnvConsumedBy checks that the named StatefulSet loads the HBase backup env
+// ConfigMap and Secret via envFrom, so HBase can write backups directly to the S3Proxy-backed
+// bucket.
+func assertHBaseEnvConsumedBy(t *testing.T, resources *helmtestutil.KubernetesResources, stsName string) {
+	const hbaseEnvName = "suse-observability-backup-sts-hbase-backup"
+
+	sts, ok := resources.Statefulsets[stsName]
+	require.True(t, ok, "%s StatefulSet should exist", stsName)
+	require.NotEmpty(t, sts.Spec.Template.Spec.Containers, "%s should have containers", stsName)
+
+	foundConfigMapRef := false
+	foundSecretRef := false
+	for _, container := range sts.Spec.Template.Spec.Containers {
+		for _, envFrom := range container.EnvFrom {
+			if envFrom.ConfigMapRef != nil && envFrom.ConfigMapRef.Name == hbaseEnvName {
+				foundConfigMapRef = true
+			}
+			if envFrom.SecretRef != nil && envFrom.SecretRef.Name == hbaseEnvName {
+				foundSecretRef = true
+			}
+		}
+	}
+	assert.True(t, foundConfigMapRef, "%s should load the HBase backup env ConfigMap via envFrom", stsName)
+	assert.True(t, foundSecretRef, "%s should load the HBase backup env Secret via envFrom", stsName)
+}
+
+// TestStackGraphBackupHBaseRegionServerConsumesEnv verifies the HBase regionserver StatefulSet
+// (distributed mode, used by full.yaml) loads the HBase backup env ConfigMap and Secret via
+// envFrom, so HBase can write backups directly to the S3Proxy-backed bucket.
+func TestStackGraphBackupHBaseRegionServerConsumesEnv(t *testing.T) {
+	resources := renderStackGraphBackupImplementation(t, "v2")
+	assertHBaseEnvConsumedBy(t, resources, "suse-observability-hbase-hbase-rs")
 }

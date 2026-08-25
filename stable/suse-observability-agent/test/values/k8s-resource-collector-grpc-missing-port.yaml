@@ -1,0 +1,22 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+# Invalid: gRPC endpoint must include a port (format: host:port).
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      interval: 15m
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "*": true
+        exclude: {}
+    rbac:
+      useWildcard: true
+
+  platformGrpcOtlpEndpoint: "otlp-my-instance.example.com"

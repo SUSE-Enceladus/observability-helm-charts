@@ -1,0 +1,19 @@
+# Integration overlay for the SUSE Virtualization (KubeVirt) stackpack.
+#
+# Pre-configures the otel.k8sResourceCollector with the API groups consumed by the
+# SUSE Virtualization stackpack's component- and relation-mappings.
+#
+# Usage — enable the flag in your values:
+#   otel:
+#     k8sResourceCollector:
+#       integrations:
+#         suseVirtualization: true
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      apiGroups:
+        include:
+          "kubevirt.io": true
+    objects:
+      pods:
+        labelSelector: "kubevirt.io=virt-launcher"

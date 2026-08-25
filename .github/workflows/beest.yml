@@ -1,0 +1,55 @@
+# Trigger Beest: manually POSTs to GitLab's beest pipeline-trigger endpoint with the chosen
+# chart's current Chart.yaml version. Beest itself remains on GitLab — this workflow only
+# fires the trigger API. Operator must explicitly uncheck `dry_run` to actually POST.
+name: Trigger Beest
+
+on:
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: Chart whose version to trigger beest with
+        type: choice
+        required: true
+        options:
+          - suse-observability
+          - suse-observability-agent
+      dry_run:
+        description: "Skip the beest trigger POST"
+        type: boolean
+        default: true
+
+jobs:
+  trigger:
+    # Job-level `if:` can't reference `env.X` (env context unavailable at job scope), so
+    # check the boolean input directly.
+    if: ${{ github.repository == 'StackVista/helm-charts-internal' && (!inputs.dry_run) }}
+    runs-on: docker
+    container:
+      image: ${{ vars.REGISTRY_QUAY_URL }}/stackstate/sts-ci-images:stackstate-devops-d4e06284
+      options: --user 0:0   # root — avoids /__w/_temp EACCES (runner fsGroup 1001 ≠ image user)
+      credentials:
+        username: ${{ vars.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Trigger beest pipeline
+        continue-on-error: true   # matches GitLab `allow_failure: true` on beest_*_trigger
+        env:
+          BEEST_TOKEN:      ${{ secrets.STS_BEEST_TRIGGER_TOKEN }}
+          BEEST_PROJECT_ID: ${{ secrets.BEEST_PROJECT_ID }}
+        run: |
+          chart="${{ inputs.chart }}"
+          version=$(yq e ".version" "stable/${chart}/Chart.yaml")
+          if [ "$chart" = "suse-observability" ]; then
+            var_name="STACKSTATE_HELM_CHART_VERSION"
+          else
+            var_name="AGENT_HELM_CHART_VERSION"
+          fi
+          echo "Triggering beest with ${var_name}=${version}"
+          curl --verbose --fail-with-body \
+            --request POST \
+            --form "token=${BEEST_TOKEN}" \
+            --form ref=main \
+            --form "variables[${var_name}]=${version}" \
+            --form "variables[TRIGGER_AGENT_X86_TESTS]=true" \
+            "https://gitlab.com/api/v4/projects/${BEEST_PROJECT_ID}/trigger/pipeline"

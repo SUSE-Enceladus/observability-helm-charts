@@ -71,6 +71,18 @@ data:
                     timeout: 0s
                     cluster: "{{ template "common.fullname.short" . }}-{{ template "stackstate.router.api.name" . }}-main"
                     prefix_rewrite: "/api/metrics/"
+                - match:
+                    prefix: "/stsAgent/otel/"
+                  route:
+                    timeout: 0s
+                    cluster: "{{ include "stackstate.otelCollector.fullname" . }}"
+                    prefix_rewrite: "/"
+                - match:
+                    prefix: "/receiver/stsAgent/otel/"
+                  route:
+                    timeout: 0s
+                    cluster: "{{ include "stackstate.otelCollector.fullname" . }}"
+                    prefix_rewrite: "/"
                 {{- if eq (include "stackstate.receiver.split.enabled" .) "true" }}
                 - match:
                     prefix: "/stsAgent/api/v1/connections"
@@ -140,7 +152,7 @@ data:
                     cluster: "{{ template "common.fullname.short" . }}-receiver"
                     prefix_rewrite: "/"
                 {{- end }}
-                {{- if .Values.ai.assistant.enabled }}
+                {{- if eq (include "stackstate.mcp.enabled" .) "true" }}
                 - match:
                     prefix: "/mcp"
                   route:
@@ -158,6 +170,47 @@ data:
                         value: "DENY"
                       append_action: APPEND_IF_EXISTS_OR_ADD
             http_filters:
+            {{- if .Values.stackstate.components.router.secureCookies.enabled }}
+            - name: envoy.filters.http.lua
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                default_source_code:
+                  inline_string: |
+                    -- Append the Secure attribute to Set-Cookie response headers when the
+                    -- request reached the edge over HTTPS (X-Forwarded-Proto: https), so
+                    -- session cookies are never exposed over plaintext. Plain-HTTP setups
+                    -- (no/!https X-Forwarded-Proto) are left untouched. The inbound header
+                    -- is set by the TLS-terminating proxy in front of the router.
+                    function envoy_on_request(handle)
+                      local proto = handle:headers():get("x-forwarded-proto")
+                      handle:streamInfo():dynamicMetadata():set(
+                        "com.suse.observability.router", "forwarded_proto", proto or "")
+                    end
+                    function envoy_on_response(handle)
+                      local meta = handle:streamInfo():dynamicMetadata():get(
+                        "com.suse.observability.router")
+                      if not meta or meta["forwarded_proto"] ~= "https" then
+                        return
+                      end
+                      local headers = handle:headers()
+                      local cookies = {}
+                      for key, value in pairs(headers) do
+                        if string.lower(key) == "set-cookie" then
+                          table.insert(cookies, value)
+                        end
+                      end
+                      if #cookies == 0 then
+                        return
+                      end
+                      headers:remove("set-cookie")
+                      for _, cookie in ipairs(cookies) do
+                        if not string.find(string.lower(cookie), ";%s*secure") then
+                          cookie = cookie .. "; Secure"
+                        end
+                        headers:add("set-cookie", cookie)
+                      end
+                    end
+            {{- end }}
             - name: envoy.filters.http.router
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -244,6 +297,20 @@ data:
                   port_value: 7077
       {{- end }}
     - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: "{{ include "stackstate.otelCollector.fullname" . }}"
+      type: STRICT_DNS
+      lb_policy: LEAST_REQUEST
+      connect_timeout: 2s
+      load_assignment:
+        cluster_name: "{{ include "stackstate.otelCollector.fullname" . }}"
+        endpoints:
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: "{{ include "stackstate.otelCollector.fullname" . }}"
+                  port_value: 4318
+    - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
       name: "{{ template "common.fullname.short" . }}-ui"
       type: STRICT_DNS
       lb_policy: LEAST_REQUEST
@@ -262,7 +329,7 @@ data:
                 socket_address:
                   address: "{{ template "common.fullname.short" . }}-ui"
                   port_value: 8080
-    {{- if .Values.ai.assistant.enabled }}
+    {{- if eq (include "stackstate.mcp.enabled" .) "true" }}
     - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
       name: "{{ template "stackstate.mcp.fullname" . }}"
       type: STRICT_DNS

@@ -1,0 +1,16 @@
+# Integration overlay for the SUSE Runtime Enforcer stackpack.
+#
+# Pre-configures the otel.k8sResourceCollector with the API groups consumed by the
+# SUSE Runtime Enforcer stackpack's component- and relation-mappings.
+#
+# Usage — enable the flag in your values:
+#   otel:
+#     k8sResourceCollector:
+#       integrations:
+#         suseRuntimeEnforcer: true
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      apiGroups:
+        include:
+          "security.rancher.io": true

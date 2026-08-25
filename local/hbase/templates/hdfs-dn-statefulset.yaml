@@ -1,0 +1,184 @@
+{{- define "hbase.hdfs.datanode.container.init" -}}
+name: datanode-init
+command:
+- bash
+- -c
+- |
+  /entrypoint -c {{ template "common.fullname.short" . }}-hdfs-nn-headful:9000 -t 300
+  mkdir -p /hadoop-data/data
+  # migrate old data directory location
+  if [ -e /hadoop-data/current ]; then
+    GLOBIGNORE=data:lost+found
+    mv /hadoop-data/* /hadoop-data/data/
+  fi
+  {{- if .Values.hdfs.volumePermissions.enabled }}
+  chown -R {{ .Values.hdfs.securityContext.runAsUser }}:{{ .Values.hdfs.securityContext.runAsGroup }} /hadoop-data
+  {{- end }}
+image: "{{ include "common.image.registry" (dict "image" .Values.global.wait.image "context" .) }}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}"
+imagePullPolicy: {{ .Values.global.wait.image.pullPolicy | quote }}
+{{- if .Values.hdfs.volumePermissions.securityContext.enabled }}
+securityContext: {{- omit .Values.hdfs.volumePermissions.securityContext "enabled" | toYaml | nindent 2 }}
+{{- end }}
+volumeMounts:
+- name: data
+  mountPath: /hadoop-data
+{{- end -}}
+
+{{- define "hbase.hdfs.datanode.container.main" -}}
+name: datanode
+image: "{{ include "common.image.registry" (dict "image" .Values.all.image "context" .) }}/{{ .Values.hdfs.image.repository }}:{{ default .Values.hdfs.version .Values.hdfs.image.tag }}"
+imagePullPolicy: {{ .Values.hdfs.image.pullPolicy }}
+args:
+- /entrypoint.sh
+- /run.sh
+- datanode
+env:
+{{- include "hbase.hdfs.commonEnv" . }}
+{{- include "all.commonEnv" . }}
+{{- include "hdfs.datanode.commonEnv" . }}
+{{- $sizingResources := include "common.sizing.hbase.hdfs.datanode.resources" . | trim -}}
+{{- $sizingResourcesDict := fromYaml $sizingResources }}
+{{- $evaluatedResources := merge (dict) .Values.hdfs.datanode.resources $sizingResourcesDict }}
+{{- $datanodeWithResources := merge (dict "resources" $evaluatedResources) .Values.hdfs.datanode }}
+{{- $serviceConfig := dict "ServiceConfig" (merge $datanodeWithResources .Values.all) }}
+{{- include "hbase.service.envvars" $serviceConfig }}
+ports:
+- containerPort: 50010
+  name: dn
+- containerPort: 50075
+  name: dninfo
+{{- if .Values.all.metrics.enabled }}
+- containerPort: 9404
+  name: metrics
+{{- end }}
+livenessProbe:
+  exec:
+    command:
+      - /dn-scripts/check-status.sh
+  initialDelaySeconds: 60
+  periodSeconds: 30
+readinessProbe:
+  exec:
+    command:
+      - /dn-scripts/check-status.sh
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  successThreshold: 1
+{{- with $evaluatedResources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+securityContext:
+  runAsNonRoot: true
+volumeMounts:
+- name: data
+  mountPath: /hadoop-data
+- name: dn-scripts
+  mountPath: /dn-scripts
+{{- end -}}
+
+{{- define "hbase.hdfs.datanode.statefulset" -}}
+{{- $commonContainer := fromYaml (include "common.container" .) -}}
+{{- $overrideContainer := fromYaml (include "hbase.hdfs.datanode.container.main" .) -}}
+{{- $stackstateHbaseHdfsDatanodeContainer := (merge $overrideContainer $commonContainer) }}
+{{- $overrideContainer := fromYaml (include "hbase.hdfs.datanode.container.init" .) -}}
+{{- $stackstateHbaseHdfsDatanodeInitContainer := (merge $overrideContainer $commonContainer) }}
+metadata:
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: hdfs-dn
+{{- if .Values.global.commonLabels }}
+{{- include "hbase.commonLabels" . | indent 4 }}
+{{- end }}
+  name: {{ template "common.fullname.short" . }}-hdfs-dn
+spec:
+  podManagementPolicy: Parallel
+  {{- $replicaCount := include "common.sizing.hdfs.datanode.effectiveReplicaCount" . }}
+  replicas: {{ $replicaCount }}
+  serviceName: {{ template "common.fullname.short" . }}-hdfs-dn
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hdfs-dn
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      app.kubernetes.io/name: {{ template "common.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: hdfs-dn
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/name: {{ template "common.name" . }}
+{{- if .Values.global.commonLabels }}
+{{- include "hbase.podLabels" . | indent 8 }}
+{{- end }}
+      annotations:
+      {{ include "common.metrics.annotations" (dict "metrics" .Values.all.metrics "port" "9404" "container_name" "datanode" "filter" .Values.hdfs.datanode.agentMetricsFilter) | indent 8 }}
+    spec:
+      {{- include "hbase.image.pullSecret.name" (dict "images" (list .Values.all.image) "context" $) | nindent 6 }}
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ template "common.fullname.short" . }}-hdfs
+      {{- end }}
+      {{- if .Values.hdfs.securityContext.enabled }}
+      securityContext: {{- omit .Values.hdfs.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      initContainers:
+      - {{ toYaml $stackstateHbaseHdfsDatanodeInitContainer | nindent 8 }}
+      containers:
+      - {{ toYaml $stackstateHbaseHdfsDatanodeContainer | nindent 8 }}
+    {{- if or .Values.all.nodeSelector .Values.hdfs.datanode.nodeSelector }}
+      nodeSelector:
+      {{- with .Values.all.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hdfs.datanode.nodeSelector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- $sizingAffinity := include "common.sizing.hbase.hdfs.datanode.affinityConfig" . | fromYaml -}}
+    {{- if or .Values.all.affinity .Values.hdfs.datanode.affinity $sizingAffinity }}
+      affinity:
+      {{- with $sizingAffinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.all.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hdfs.datanode.affinity }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.hdfs.datanode.terminationGracePeriodSeconds }}
+    {{- if or .Values.all.tolerations .Values.hdfs.datanode.tolerations }}
+      tolerations:
+      {{- with .Values.all.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hdfs.datanode.tolerations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+      volumes:
+    {{- if not .Values.hdfs.datanode.persistence.enabled }}
+      - name: data
+        emptyDir: {}
+    {{- end }}
+      - name: dn-scripts
+        configMap:
+          name: {{ template "common.fullname.short" . }}-hdfs-dn-scripts
+          defaultMode: 0755
+{{- if .Values.hdfs.datanode.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: {{ .Values.hdfs.datanode.persistence.accessModes }}
+        resources:
+          requests:
+            storage: {{ include "hbase.hdfs.datanode.persistence.size" . }}
+        {{ include "common.storage.class" ( dict "persistence" .Values.hdfs.datanode.persistence "global" .Values.global) | nindent 8 }}
+{{- end }}
+{{- end -}}
+
+{{- if eq (include "hbase.deployment.mode" .) "Distributed" -}}
+apiVersion: apps/v1
+kind: StatefulSet
+{{ include "hbase.hdfs.datanode.statefulset" . }}
+{{- end -}}

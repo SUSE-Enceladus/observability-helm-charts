@@ -56,15 +56,31 @@ Every source is a `dockerimage` kind pulling from `quay.io/stackstate/<name>` wi
 
 ### Tag Filter Patterns
 
-Images use one of three tag formats. When adding a new image, pick the matching `tagfilter` and `versionfilter`:
+Images use a small set of tag formats. Keep the source entry in
+`updatecli/updatecli.d/update-docker-images/update.yaml` close to the image it
+tracks, and keep the reference table in
+[`updatecli-image-mapping.md`](updatecli/updatecli-image-mapping.md).
 
-| Format | Example Tag | `tagfilter` | `versionfilter` regex |
-|--------|-------------|-------------|----------------------|
-| Standard | `v1.109.0-614527d8-release-138` | `.*-[a-f0-9]{8}-release-[0-9]+$` | `.*-(\d+)$` |
-| Reversed | `f40221cf-76-release` | `^[a-f0-9]{8}-[0-9]+-release$` | `^[a-f0-9]{8}-([0-9]+)-release$` |
-| Semver | `1.8.3-573` | `^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$` | `.*-(\d+)$` |
+### Commit-hash sources (agent images)
 
-All use `versionfilter.kind: regex/semver` which extracts a build number for ordering.
+`processAgentHash` and `agentHash` are `shell` sources that resolve the latest
+commit hash of `stackstate-process-agent` / `stackstate-agent` and use it as the
+image tag. Because a fresh commit may not have its image built/pushed yet, each
+source verifies the consumed image(s) exist with `skopeo inspect` before bumping:
+
+- `processAgentHash` → `quay.io/stackstate/stackstate-k8s-process-agent:<hash>`
+- `agentHash` → `quay.io/stackstate/stackstate-k8s-agent:<hash>` **and**
+  `quay.io/stackstate/stackstate-k8s-cluster-agent:<hash>`
+
+If every consumed image exists, the source emits the new hash and the tag is
+bumped. If any is still missing, the source instead **re-emits the current tag**
+(read from `stable/suse-observability-agent/values.yaml` via `scmid: default`, so
+it reads the same checkout the targets diff against). Re-emitting the current
+value produces no diff — so no bump happens until the build lands — while keeping
+the source successful. This matters because the sources live in the single shared
+`docker-images` manifest: a source that *failed* (non-zero exit) would red-fail
+the whole pipeline and block every unrelated image bump, whereas a missing build
+should only hold back the agent tags.
 
 ## Target Configuration
 
@@ -77,8 +93,7 @@ Targets are `yaml` kind with `scmid: default`. Key fields:
 
 ### Special Cases
 
-- **hadoop**: Uses a `transformers.findsubmatch` to strip the semver prefix from the tag. The values file expects `java21-8-hash-buildId` but the Docker tag is `version-java21-8-hash-release-buildId`.
-- **container-tools**: Updates 5 keys across 3 targets (suse-observability, victoria-metrics backup cron, suse-observability-agent).
+- **container-tools**: Updates 5 keys across 3 targets (suse-observability, victoria-metrics backup cron, suse-observability-agent). Matches only standard `main` tags; `1.8.6_dev-*` tags are CI/dev images and must not be used in customer-runtime chart defaults.
 - **kubernetes-rbac-agent (suse-observability target)**: May need to be temporarily disabled if the tag key doesn't exist on master yet (updatecli clones from remote).
 
 ## Values Templating
@@ -113,7 +128,7 @@ Dry-run without committing or pushing (requires `GITLAB_TOKEN` in `.env`):
 ```bash
 source .env
 docker run --rm --network host -v $(pwd):/workspace:z -w /workspace -e GITLAB_TOKEN \
-  quay.io/stackstate/container-tools:23b0c0da-591-dev \
+  quay.io/stackstate/container-tools:1.8.6_dev-fa52bb17-main-4 \
   updatecli diff \
     -c updatecli/updatecli.d/update-docker-images/ \
     -v updatecli/values.d/values.yaml
@@ -124,7 +139,7 @@ To apply locally and inspect changes (writes to `updatecli-work/` subdirectory):
 ```bash
 source .env
 docker run --rm --network host -v $(pwd):/workspace:z -w /workspace -e GITLAB_TOKEN \
-  quay.io/stackstate/container-tools:23b0c0da-591-dev \
+  quay.io/stackstate/container-tools:1.8.6_dev-fa52bb17-main-4 \
   updatecli apply --commit=false --push=false --clean=false \
     -c updatecli/updatecli.d/update-docker-images/ \
     -v updatecli/values.d/values.yaml -v updatecli/values.d/values-local.yaml

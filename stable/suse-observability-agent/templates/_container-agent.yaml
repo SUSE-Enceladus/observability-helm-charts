@@ -47,7 +47,9 @@
       value: {{ .Values.nodeAgent.containers.agent.logLevel | default .Values.nodeAgent.logLevel | quote }}
     - name: STS_LOG_LEVEL
       value: {{ .Values.nodeAgent.containers.agent.logLevel | default .Values.nodeAgent.logLevel | quote }}
-    - name: STS_PROCESS_AGENT_ENABLED
+    - name: STS_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED
+      value: "false"
+    - name: STS_PROCESS_CONFIG_CONTAINER_COLLECTION_ENABLED
       value: "false"
     - name: STS_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED
       value: "false"
@@ -113,7 +115,7 @@
     protocol: TCP
   {{- with .Values.nodeAgent.containers.agent.resources }}
   resources:
-    {{- toYaml . | nindent 12 }}
+    {{- toYaml (omit . "override") | nindent 12 }}
   {{- end }}
   volumeMounts:
   {{- if .Values.nodeAgent.containerRuntime.customSocketPath }}

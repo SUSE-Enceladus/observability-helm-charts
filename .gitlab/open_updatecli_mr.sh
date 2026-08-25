@@ -4,9 +4,9 @@
 # the finalize pipeline pushed (updatecli's action only runs when it pushes).
 set -euo pipefail
 
-SOURCE_BRANCH="${1:-updatecli-master-docker-images}"
-TARGET_BRANCH="${2:-master}"
-TITLE="${3:-[master] Bump helm chart docker images}"
+SOURCE_BRANCH="${1:-unset-source}"
+TARGET_BRANCH="${2:-unset-target}"
+TITLE="${3:-Bump helm chart docker images}"
 
 if [ -z "${GITLAB_TOKEN:-}" ]; then
   echo "ERROR: GITLAB_TOKEN not set"
@@ -17,10 +17,19 @@ fi
 PROJECT_ID="${CI_PROJECT_ID:-stackvista%2Fdevops%2Fhelm-charts}"
 API_URL="https://gitlab.com/api/v4/projects/${PROJECT_ID}/merge_requests"
 
-# Check if source branch exists on remote
-git fetch origin "$SOURCE_BRANCH" --quiet 2>/dev/null || true
+# Check if source and target branches exist on remote
+git fetch origin "$SOURCE_BRANCH" "$TARGET_BRANCH" --quiet 2>/dev/null || true
 if ! git rev-parse "origin/$SOURCE_BRANCH" >/dev/null 2>&1; then
   echo "Branch origin/$SOURCE_BRANCH does not exist; skipping MR create"
+  exit 0
+fi
+if ! git rev-parse "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+  echo "ERROR: Branch origin/$TARGET_BRANCH does not exist" >&2
+  exit 1
+fi
+
+if git diff --quiet "origin/$TARGET_BRANCH...origin/$SOURCE_BRANCH" --; then
+  echo "Branch origin/$SOURCE_BRANCH has no diff against origin/$TARGET_BRANCH; skipping MR create"
   exit 0
 fi
 
@@ -39,7 +48,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
   --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   --header "Content-Type: application/json" \
   "${API_URL}" \
-  --data "{\"source_branch\":\"${SOURCE_BRANCH}\",\"target_branch\":\"${TARGET_BRANCH}\",\"title\":\"${TITLE}\"}")
+  --data "{\"source_branch\":\"${SOURCE_BRANCH}\",\"target_branch\":\"${TARGET_BRANCH}\",\"title\":\"[${TARGET_BRANCH}] ${TITLE}\"}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 BODY=$(echo "$RESPONSE" | sed '$d')

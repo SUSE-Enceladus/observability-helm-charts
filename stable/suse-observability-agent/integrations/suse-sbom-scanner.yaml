@@ -1,0 +1,20 @@
+# Integration overlay for the SUSE SBOM Scanner stackpack.
+#
+# Pre-configures the otel.k8sResourceCollector with the API groups consumed by the
+# SUSE SBOM Scanner stackpack's component- and relation-mappings.
+#
+# Usage — enable the flag in your values:
+#   otel:
+#     k8sResourceCollector:
+#       integrations:
+#         suseSbomScanner: true
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      apiGroups:
+        include:
+          "sbomscanner.kubewarden.io": true
+          "storage.sbomscanner.kubewarden.io": true
+          # CloudNativePG — sbomscanner stackpack maps the Postgres CRs that
+          # back its storage layer.
+          "postgresql.cnpg.io": true

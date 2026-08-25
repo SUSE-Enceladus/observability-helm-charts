@@ -1,0 +1,23 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+# Enable cluster collector with restricted RBAC (specific API groups)
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      snapshotInterval: 5m
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "policies.kubewarden.io": true
+          "longhorn.io": true
+          "cert-manager.io": true
+        exclude:
+          "test.suse.com": true
+    rbac:
+      useWildcard: false

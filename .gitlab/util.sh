@@ -2,8 +2,10 @@
 
 set -e
 
+WORKING_DIR=${CI_PROJECT_DIR:-./}
+
 # shellcheck disable=SC1091
-source "$CI_PROJECT_DIR/.gitlab/gpg_utils.sh"
+source "${WORKING_DIR}/.gitlab/gpg_utils.sh"
 
 function commit_changes() {
   message=${1:?"Please provide a commit message"}
@@ -27,7 +29,7 @@ function push_changes_skip_ci() {
     if [[ "${PROMOTION_DRY_RUN}" == 'no' ]]; then
       echo "Pushing changes"
       git pull --rebase origin "${branch}"
-      git push "https://gitlab-ci-token:${gitlab_api_scope_token:?}@gitlab.com/stackvista/devops/helm-charts.git" HEAD:"${branch}" -o ci.skip # I have to use option `ci.skip' instead of a commit message otherwise the pipeline isn't trigger for a tag creation
+      git push "https://gitlab-ci-token:${HELM_CHARTS_PAT:?}@gitlab.com/stackvista/devops/helm-charts.git" HEAD:"${branch}" -o ci.skip # I have to use option `ci.skip' instead of a commit message otherwise the pipeline isn't trigger for a tag creation
     else
       echo "Not pushing changes, set PROMOTION_DRY_RUN='no' to commit changes"
     fi
@@ -37,7 +39,7 @@ function push_changes_skip_ci() {
 function push_tag_skip_ci() {
   tag=$1
   echo "Pushing tag '$tag', skipping ci"
-  git push "https://gitlab-ci-token:${gitlab_api_scope_token:?}@gitlab.com/stackvista/devops/helm-charts.git" "${tag}" -o ci.skip
+  git push "https://gitlab-ci-token:${HELM_CHARTS_PAT:?}@gitlab.com/stackvista/devops/helm-charts.git" "${tag}" -o ci.skip
 }
 
 function push_changes() {
@@ -45,7 +47,7 @@ function push_changes() {
     if [[ "${PROMOTION_DRY_RUN}" == 'no' ]]; then
       echo "Pushing changes"
       git pull --rebase origin "${branch}"
-      git push "https://gitlab-ci-token:${gitlab_api_scope_token:?}@gitlab.com/stackvista/devops/helm-charts.git" HEAD:"${branch}"
+      git push "https://gitlab-ci-token:${HELM_CHARTS_PAT:?}@gitlab.com/stackvista/devops/helm-charts.git" HEAD:"${branch}"
     else
       echo "Not pushing changes, set PROMOTION_DRY_RUN='no' to commit changes"
     fi
@@ -64,5 +66,5 @@ function update_chart_version_in_readme_file() {
 function get_secret_values() {
   # This function extracts credentials, etc and sets them as environment variables.
   secret_file=$1
-  eval "$(sops -d "$secret_file" | awk -F ": " '{print $1" "$2}' | while read -r key value; do echo export "${key}"="$value"; done)"
+  eval "$(sops -d "$secret_file" | awk -F ": " '{print $1" "$2}' | while read -r key value; do printf 'export %s=%q\n' "$key" "$value"; done)"
 }

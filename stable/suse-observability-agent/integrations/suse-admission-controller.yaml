@@ -1,0 +1,21 @@
+# Integration overlay for the SUSE Admission Controller (Kubewarden) stackpack.
+#
+# Pre-configures the otel.k8sResourceCollector with the API groups consumed by the
+# SUSE Admission Controller stackpack's component- and relation-mappings.
+#
+# Usage — enable the flag in your values:
+#   otel:
+#     k8sResourceCollector:
+#       integrations:
+#         suseAdmissionController: true
+otel:
+  k8sResourceCollector:
+    crDiscovery:
+      apiGroups:
+        include:
+          "policies.kubewarden.io": true
+          # Policy/audit reports. wgpolicyk8s.io is the current group; openreports.io
+          # is the successor group the working group is migrating to. Both are included
+          # so the integration works before and after clusters migrate.
+          "wgpolicyk8s.io": true
+          "openreports.io": true

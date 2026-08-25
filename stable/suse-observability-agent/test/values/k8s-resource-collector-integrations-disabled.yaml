@@ -1,0 +1,25 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+# All integration flags explicitly disabled — used by the "disabled" test to
+# verify that no integration groups appear regardless of chart defaults.
+otel:
+  enabled: true
+  integrations:
+    suseRuntimeEnforcer: false
+    suseAdmissionController: false
+    suseVirtualization: false
+    suseSbomScanner: false
+    rancherAgent: false
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "example.com": true
+    rbac:
+      useWildcard: true

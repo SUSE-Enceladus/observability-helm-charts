@@ -1,0 +1,10 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+otel:
+  enabled: false
+  k8sResourceCollector:
+    enabled: true

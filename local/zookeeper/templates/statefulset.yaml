@@ -1,0 +1,412 @@
+{{- $replicaCount := include "common.sizing.zookeeper.effectiveReplicaCount" . | int -}}
+{{- $sizingPersistenceSize := include "common.sizing.zookeeper.persistence.size" . | trim -}}
+{{- $persistenceSize := default $sizingPersistenceSize .Values.persistence.size }}
+apiVersion: {{ include "common.capabilities.statefulset.apiVersion" . }}
+kind: StatefulSet
+metadata:
+  name: {{ template "common.names.fullname" . }}
+  namespace: {{ template "zookeeper.namespace" . }}
+  labels: {{- include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: zookeeper
+    role: zookeeper
+    {{- include "zookeeper.commonLabels" . | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $replicaCount }}
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" . | nindent 6 }}
+      app.kubernetes.io/component: zookeeper
+  serviceName: {{ printf "%s-headless" (include "common.names.fullname" .) | trunc 63 | trimSuffix "-" }}
+  {{- if .Values.updateStrategy }}
+  updateStrategy: {{- toYaml .Values.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.podAnnotations }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.podAnnotations "context" $) | nindent 8 }}
+        {{- end }}
+        {{- if (include "zookeeper.createConfigmap" .) }}
+        checksum/configuration: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if or (include "zookeeper.createSecret" .) (include "zookeeper.client.createTlsPasswordsSecret" .) (include "zookeeper.quorum.createTlsPasswordsSecret" .) }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if or (include "zookeeper.client.createTlsSecret" .) (include "zookeeper.quorum.createTlsSecret" .) }}
+        checksum/tls-secrets: {{ include (print $.Template.BasePath "/tls-secrets.yaml") . | sha256sum }}
+        {{- end }}
+      labels: {{- include "common.labels.standard" . | nindent 8 }}
+        app.kubernetes.io/component: zookeeper
+        {{- include "zookeeper.podLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ template "zookeeper.serviceAccountName" . }}
+      {{- include "zookeeper.imagePullSecrets" . | nindent 6 }}
+      {{- if .Values.hostAliases }}
+      hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      {{- $sizingAffinity := include "common.sizing.zookeeper.affinityConfig" . | fromYaml -}}
+      {{- $finalAffinity := .Values.affinity | default dict -}}
+      {{- if and (not .Values.affinity) $sizingAffinity -}}
+        {{- $finalAffinity = $sizingAffinity -}}
+      {{- end -}}
+      {{- if $finalAffinity }}
+      affinity: {{- include "common.tplvalues.render" (dict "value" $finalAffinity "context" $) | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.podAffinityPreset "component" "zookeeper" "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.podAntiAffinityPreset "component" "zookeeper" "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.nodeAffinityPreset.type "key" .Values.nodeAffinityPreset.key "values" .Values.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" (dict "value" .Values.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.tolerations "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.topologySpreadConstraints "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if and .Values.volumePermissions.enabled .Values.persistence.enabled }}
+        - name: volume-permissions
+          image: {{ template "zookeeper.volumePermissions.image" . }}
+          imagePullPolicy: {{ default "" .Values.volumePermissions.image.pullPolicy | quote }}
+          command:
+            - /bin/bash
+          args:
+            - -ec
+            - |
+              mkdir -p {{ .Values.mountPath }}
+              chown -R {{ .Values.containerSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.fsGroup }} {{ .Values.mountPath }}
+              {{- if .Values.dataLogDir }}
+              mkdir -p {{ .Values.dataLogDir }}
+              chown -R {{ .Values.containerSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.fsGroup }} {{ .Values.dataLogDir }}
+              {{- end }}
+          {{- if .Values.volumePermissions.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.volumePermissions.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.volumePermissions.resources }}
+          resources: {{- toYaml .Values.volumePermissions.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.mountPath }}
+            {{- if .Values.dataLogDir }}
+            - name: data-log
+              mountPath: {{ .Values.dataLogDir }}
+            {{- end }}
+        {{- end }}
+        {{- if or .Values.tls.client.enabled .Values.tls.quorum.enabled }}
+        - name: init-certs
+          image: {{ include "zookeeper.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          command:
+            - /scripts/init-certs.sh
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            {{- if or .Values.tls.client.passwordsSecretName (include "zookeeper.client.createTlsPasswordsSecret" .) }}
+            - name: ZOO_TLS_CLIENT_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zookeeper.client.tlsPasswordsSecret" . }}
+                  key: "keystore-password"
+            - name: ZOO_TLS_CLIENT_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zookeeper.client.tlsPasswordsSecret" . }}
+                  key: "truststore-password"
+            {{- end }}
+            {{- if or .Values.tls.quorum.passwordsSecretName (include "zookeeper.quorum.createTlsPasswordsSecret" .) }}
+            - name: ZOO_TLS_QUORUM_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zookeeper.quorum.tlsPasswordsSecret" . }}
+                  key: "keystore-password"
+            - name: ZOO_TLS_QUORUM_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zookeeper.quorum.tlsPasswordsSecret" . }}
+                  key: "truststore-password"
+            {{- end }}
+          {{- if .Values.tls.resources }}
+          resources: {{- toYaml .Values.tls.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts/init-certs.sh
+              subPath: init-certs.sh
+            {{- if or .Values.tls.client.enabled }}
+            - name: client-certificates
+              mountPath: /certs/client
+            - name: client-shared-certs
+              mountPath: /opt/bitnami/zookeeper/config/certs/client
+            {{- end }}
+            {{- if or .Values.tls.quorum.enabled }}
+            - name: quorum-certificates
+              mountPath: /certs/quorum
+            - name: quorum-shared-certs
+              mountPath: /opt/bitnami/zookeeper/config/certs/quorum
+            {{- end }}
+        {{- end }}
+        {{- if .Values.initContainers }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.initContainers "context" $) | trim | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: zookeeper
+          image: {{ template "zookeeper.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.diagnosticMode.enabled }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.diagnosticMode.command "context" $) | nindent 12 }}
+          {{- else if .Values.command }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.command "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.diagnosticMode.enabled }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.diagnosticMode.args "context" $) | nindent 12 }}
+          {{- else if .Values.args }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.args "context" $) | nindent 12 }}
+          {{- end }}
+          {{- $sizingResources := include "common.sizing.zookeeper.resources" . | trim -}}
+          {{- $sizingResourcesDict := fromYaml $sizingResources }}
+          {{- $evaluatedResources := merge (dict) .Values.resources $sizingResourcesDict }}
+          {{- with $evaluatedResources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            # The SUSE Apache ZooKeeper image's docker-entrypoint.sh reads
+            # ZOO_DATA_DIR to locate (and write, on first start) the `myid` file.
+            # Most ZooKeeper tunables are rendered into zoo.cfg by the chart
+            # ConfigMap rather than passed via env vars.
+            - name: ZOO_DATA_DIR
+              value: {{ .Values.dataDir | quote }}
+            - name: ZOO_DATA_LOG_DIR
+              value: {{ .Values.dataLogDir | default .Values.dataDir | quote }}
+            - name: ZK_SERVER_HEAP
+              value: {{ include "common.sizing.zookeeper.heapSize" . | trim | default .Values.heapSize | quote }}
+            {{- if .Values.jvmFlags }}
+            - name: SERVER_JVMFLAGS
+              value: {{ .Values.jvmFlags | quote }}
+            {{- end }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            {{- if .Values.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.extraEnvVarsCM .Values.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.extraEnvVarsCM "context" $) }}
+            {{- end }}
+            {{- if .Values.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.extraEnvVarsSecret "context" $) }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- if not .Values.service.disableBaseClientPort }}
+            - name: client
+              containerPort: {{ .Values.containerPorts.client }}
+            {{- end }}
+            {{- if .Values.tls.client.enabled }}
+            - name: client-tls
+              containerPort: {{ .Values.containerPorts.tls }}
+            {{- end }}
+            - name: follower
+              containerPort: {{ .Values.containerPorts.follower }}
+            - name: election
+              containerPort: {{ .Values.containerPorts.election }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.containerPort }}
+            {{- end }}
+          {{- if not .Values.diagnosticMode.enabled }}
+          {{- /* The SUSE Apache ZooKeeper image lacks `nc`/`timeout`/`grep`/`openssl`, */ -}}
+          {{- /* so probes use a pure-bash `ruok` over /dev/tcp.                            */ -}}
+          {{- $probePort := .Values.containerPorts.client -}}
+          {{- if .Values.service.disableBaseClientPort -}}
+          {{-   $probePort = .Values.containerPorts.follower -}}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" (omit .Values.livenessProbe "enabled" "probeCommandTimeout") "context" $) | nindent 12 }}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - 'exec 3<>/dev/tcp/127.0.0.1/{{ $probePort }}; printf ruok >&3; read -r -t {{ .Values.livenessProbe.probeCommandTimeout }} -u 3 r; [ "$r" = imok ]'
+          {{- else if .Values.customLivenessProbe }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.customLivenessProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" (omit .Values.readinessProbe "enabled" "probeCommandTimeout") "context" $) | nindent 12 }}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - 'exec 3<>/dev/tcp/127.0.0.1/{{ $probePort }}; printf ruok >&3; read -r -t {{ .Values.readinessProbe.probeCommandTimeout }} -u 3 r; [ "$r" = imok ]'
+          {{- else if .Values.customReadinessProbe }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.customReadinessProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" (omit .Values.startupProbe "enabled") "context" $) | nindent 12 }}
+            tcpSocket:
+              {{- if not .Values.service.disableBaseClientPort }}
+              port: client
+              {{- else }}
+              port: follower
+              {{- end }}
+          {{- else if .Values.customStartupProbe }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" .Values.customStartupProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.lifecycleHooks }}
+          lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts/setup.sh
+              subPath: setup.sh
+            - name: data
+              mountPath: {{ .Values.mountPath }}
+            {{- if .Values.dataLogDir }}
+            - name: data-log
+              mountPath: {{ .Values.dataLogDir }}
+            {{- end }}
+            - name: config
+              mountPath: /usr/share/zookeeper/conf/zoo.cfg
+              subPath: zoo.cfg
+            {{- if .Values.tls.client.enabled }}
+            - name: client-shared-certs
+              mountPath: /opt/bitnami/zookeeper/config/certs/client
+              readOnly: true
+            {{- end }}
+            {{- if .Values.tls.quorum.enabled }}
+            - name: quorum-shared-certs
+              mountPath: /opt/bitnami/zookeeper/config/certs/quorum
+              readOnly: true
+            {{- end }}
+            {{- if .Values.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" ( dict "value" .Values.extraVolumeMounts "context" $ ) | nindent 12 }}
+            {{- end }}
+        {{- if .Values.sidecars }}
+        {{- include "common.tplvalues.render" ( dict "value" .Values.sidecars "context" $ ) | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ printf "%s-scripts" (include "common.names.fullname" .) }}
+            defaultMode: 0755
+        - name: config
+          configMap:
+            name: {{ include "zookeeper.configmapName" . }}
+        {{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.persistence.existingClaim .) }}
+        {{- else if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- if and .Values.persistence.enabled .Values.persistence.dataLogDir.existingClaim }}
+        - name: data-log
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.persistence.dataLogDir.existingClaim .) }}
+        {{- else if and ( not .Values.persistence.enabled ) .Values.dataLogDir }}
+        - name: data-log
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.tls.client.enabled }}
+        - name: client-certificates
+          secret:
+            secretName: {{ include "zookeeper.client.tlsSecretName" . }}
+            defaultMode: 256
+        - name: client-shared-certs
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.tls.quorum.enabled }}
+        - name: quorum-certificates
+          secret:
+            secretName: {{ include "zookeeper.quorum.tlsSecretName" . }}
+            defaultMode: 256
+        - name: quorum-shared-certs
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumes "context" $) | nindent 8 }}
+        {{- end }}
+  {{- if and .Values.persistence.enabled (not (and .Values.persistence.existingClaim .Values.persistence.dataLogDir.existingClaim) ) }}
+  volumeClaimTemplates:
+    {{- if not .Values.persistence.existingClaim }}
+    - metadata:
+        name: data
+        annotations:
+        {{- range $key, $value := .Values.persistence.annotations }}
+          {{ $key }}: {{ $value }}
+        {{- end }}
+        labels:
+          app.kubernetes.io/part-of: suse-observability
+      spec:
+        accessModes:
+        {{- range .Values.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $persistenceSize | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.persistence "global" .Values.global) | nindent 8 }}
+        {{- if .Values.persistence.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.persistence.selector "context" $) | nindent 10 }}
+        {{- end }}
+    {{- end }}
+    {{- if and (not .Values.persistence.dataLogDir.existingClaim) .Values.dataLogDir }}
+    - metadata:
+        name: data-log
+        annotations:
+        {{- range $key, $value := .Values.persistence.annotations }}
+          {{ $key }}: {{ $value }}
+        {{- end }}
+        {{- if .Values.commonAnnotations }}
+          {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.commonLabels }}
+        labels:
+          {{- include "common.tplvalues.render" ( dict "value" .Values.commonLabels "context" $ ) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.dataLogDir.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.persistence "global" .Values.global) | nindent 8 }}
+        {{- if .Values.persistence.dataLogDir.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.persistence.dataLogDir.selector "context" $) | nindent 10 }}
+        {{- end }}
+    {{- end }}
+  {{- end }}

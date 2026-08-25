@@ -3,115 +3,137 @@ pipelineid: docker-images
 
 scms:
   default:
-    kind: gitlab
+    kind: github
     spec:
       owner: "{{ .scm.owner }}"
       repository: "{{ .scm.repository }}"
-      branch: "{{ .scm.branch }}"
+      branch: '{{ requiredEnv .scm.branchEnv }}'
 {{- if .scm.directory }}
       directory: "{{ .scm.directory }}"
 {{- end }}
       user: "{{ env .scm.userEnv }}"
       email: "{{ env .scm.emailEnv }}"
       token: "{{ requiredEnv .scm.tokenEnv }}"
+      username: "x-access-token"
       workingbranchseparator: "-"
-      type: ""
-      gpg:
-        signingkey: |-
-{{ env .scm.gpgKeyEnv | nindent 10 }}
-        passphrase: "{{ env .scm.gpgKeyPassEnv }}"
 
 sources:
+  ###################
+  # All images with tag x.y.z-soN
+  # Shell sources using updatecli/latest-so-tag.sh, which sorts by
+  # (x, y, z, N) numerically.  updatecli's built-in versionfilter kinds
+  # (regex/semver, latest) compare the soN pre-release identifier
+  # lexicographically, so "so10" < "so9" — wrong once N ≥ 10.
+  ###################
   clickhouseBackup:
     name: "clickhouse-backup"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/clickhouse-backup"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-[0-9]+-release$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+)-release$"
+      command: updatecli/latest-so-tag.sh clickhouse-backup
   clickhouse:
     name: "clickhouse"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/clickhouse"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
+      command: updatecli/latest-so-tag.sh clickhouse
   containerTools:
     name: "container-tools"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/container-tools"
-      architecture: "linux/amd64"
-      tagfilter: "^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
+      command: updatecli/latest-so-tag.sh container-tools
   elasticsearch:
     name: "elasticsearch"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/elasticsearch"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
+      command: updatecli/latest-so-tag.sh elasticsearch
   elasticsearchExporter:
     name: "elasticsearch-exporter"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/elasticsearch-exporter"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  envoy:
-    name: "envoy"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/envoy"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[0-9]+\\.[0-9]+-release$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+\\.[0-9]+)-release$"
+      command: updatecli/latest-so-tag.sh elasticsearch-exporter
   hadoop:
     name: "hadoop"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/hadoop"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
+      command: updatecli/latest-so-tag.sh hadoop
   jmxExporter:
     name: "jmx-exporter"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/jmx-exporter"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-[0-9]+-release$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+)-release$"
+      command: updatecli/latest-so-tag.sh jmx-exporter
   kafka:
     name: "kafka"
-    kind: dockerimage
+    kind: shell
     spec:
-      image: "quay.io/stackstate/kafka"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[0-9]+\\.[0-9]+-release$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+\\.[0-9]+)-release$"
+      command: updatecli/latest-so-tag.sh kafka
+  nginxPrometheusExporter:
+    name: "nginx-prometheus-exporter"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh nginx-prometheus-exporter
+  opentelemetryTargetAllocator:
+    name: "opentelemetry-target-allocator"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh opentelemetry-target-allocator
+  promtail:
+    name: "promtail"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh promtail
+  s3proxy:
+    name: "s3proxy"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh s3proxy
+  victoriaMetrics:
+    name: "victoria-metrics"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh victoria-metrics
+  vmagent:
+    name: "vmagent"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh vmagent
+  vmbackup:
+    name: "vmbackup"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh vmbackup
+  vmrestore:
+    name: "vmrestore"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh vmrestore
+  wait:
+    name: "wait"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh wait
+  zookeeper:
+    name: "zookeeper"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh zookeeper
+  envoy:
+    name: "envoy"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh envoy
+
+  ###################
+  # Images with other tags
+  ###################
+  httpHeaderInjectorProxy:
+    name: "http-header-injector-proxy"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh http-header-injector-proxy
+  httpHeaderInjectorProxyInit:
+    name: "http-header-injector-proxy-init"
+    kind: shell
+    spec:
+      command: updatecli/latest-so-tag.sh http-header-injector-proxy-init
   kubernetesRbacAgent:
     name: "kubernetes-rbac-agent"
     kind: dockerimage
@@ -122,66 +144,28 @@ sources:
       versionfilter:
         kind: regex/semver
         regex: "^[a-f0-9]{8}-([0-9]+)-release$"
-  nginxPrometheusExporter:
-    name: "nginx-prometheus-exporter"
+  suseObservabilityMcp:
+    name: "suse-observability-mcp"
     kind: dockerimage
     spec:
-      image: "quay.io/stackstate/nginx-prometheus-exporter"
+      image: "quay.io/stackstate/suse-observability-mcp"
       architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-[0-9]+-release$"
+      tagfilter: "^[0-9]{14}-[0-9a-f]{8}$"
       versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+)-release$"
-  victoriaMetrics:
-    name: "victoria-metrics"
+        kind: regex/time
+        regex: "^([0-9]{14})-[0-9a-f]{8}$"
+        pattern: "20060102150405"
+  suseObservabilityBorg:
+    name: "suse-observability-borg"
     kind: dockerimage
     spec:
-      image: "quay.io/stackstate/victoria-metrics"
+      image: "quay.io/stackstate/suse-observability-borg"
       architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
+      tagfilter: "^[0-9]{14}-[0-9a-f]{8}$"
       versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  vmagent:
-    name: "vmagent"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/vmagent"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  vmbackup:
-    name: "vmbackup"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/vmbackup"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  vmrestore:
-    name: "vmrestore"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/vmrestore"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  wait:
-    name: "wait"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/wait"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
+        kind: regex/time
+        regex: "^([0-9]{14})-[0-9a-f]{8}$"
+        pattern: "20060102150405"
   workloadObserver:
     name: "workload-observer"
     kind: dockerimage
@@ -192,16 +176,6 @@ sources:
       versionfilter:
         kind: regex/semver
         regex: "^[a-f0-9]{8}-([0-9]+)-release$"
-  zookeeper:
-    name: "zookeeper"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/zookeeper"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-[0-9]+-release$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-([0-9]+)-release$"
   kafkaupOperator:
     name: "kafkaup-operator"
     kind: dockerimage
@@ -220,6 +194,20 @@ sources:
       tagfilter: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
       versionfilter:
         kind: semver
+  stsOpentelemetryAgentCollector:
+    name: "sts-opentelemetry-collector (agent BOM)"
+    kind: dockerimage
+    spec:
+      # Same image repository as stsOpentelemetryCollector, but the strict agent
+      # BOM variant is published with an "-agent" suffix (e.g. v0.0.46-agent).
+      # Ranked on the semver core so the "-agent" suffix is not treated as a
+      # semver pre-release (which would sort below the plain release).
+      image: "quay.io/stackstate/sts-opentelemetry-collector"
+      architecture: "linux/amd64"
+      tagfilter: "^v[0-9]+\\.[0-9]+\\.[0-9]+-agent$"
+      versionfilter:
+        kind: regex/semver
+        regex: "^v([0-9]+\\.[0-9]+\\.[0-9]+)-agent$"
   genericSidecarInjector:
     name: "generic-sidecar-injector"
     kind: dockerimage
@@ -240,36 +228,86 @@ sources:
       versionfilter:
         kind: semver
         pattern: ">=0.0.0-0"
-  promtail:
-    name: "promtail"
-    kind: dockerimage
+  # Resolves the latest commit hash and uses it as the image tag. The latest
+  # commit may not have its image built/pushed yet; bumping to an unbuilt tag
+  # would produce a broken image reference. So before emitting the new hash we
+  # verify the consumed image(s) exist in the registry, and otherwise re-emit the
+  # CURRENT tag (read from the chart values via scmid: default, so we read the
+  # same checkout the targets diff against). Re-emitting the current value yields
+  # no diff and thus no bump, while keeping the source/pipeline successful — a
+  # failing source would otherwise red-fail the whole shared docker-images run.
+  processAgentHash:
+    name: "stackstate-process-agent latest commit hash"
+    kind: shell
+    scmid: default
     spec:
-      image: "quay.io/stackstate/promtail"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  s3proxy:
-    name: "s3proxy"
-    kind: dockerimage
-    spec:
-      image: "quay.io/stackstate/s3proxy"
-      architecture: "linux/amd64"
-      tagfilter: ".*-[a-f0-9]{8}-release-[0-9]+$"
-      versionfilter:
-        kind: regex/semver
-        regex: ".*-(\\d+)$"
-  httpHeaderInjectorChart:
-    name: "http-header-injector chart"
-    kind: helmchart
-    spec:
-      url: https://helm.stackstate.io
-      name: http-header-injector
-      versionfilter:
-        kind: semver
+      command: |
+        set -euo pipefail
 
-# Single pipeline: all targets chained with dependson so they run sequentially.
+        VALUES_FILE="stable/suse-observability-agent/values.yaml"
+        CURRENT="$(yq -r '.nodeAgent.containers.processAgent.image.tag' "$VALUES_FILE")"
+        if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
+          echo "Could not read current process-agent image tag from $VALUES_FILE" >&2
+          exit 1
+        fi
+
+        HASH="$(curl -sf "https://api.github.com/repos/StackVista/stackstate-process-agent/commits/master" | jq -r '.sha[0:8]' || true)"
+        if [ -z "$HASH" ] || [ "$HASH" = "null" ]; then
+          echo "Could not resolve stackstate-process-agent commit hash; keeping current tag $CURRENT" >&2
+          printf '%s' "$CURRENT"
+          exit 0
+        fi
+
+        # Only bump to the new hash once its image exists; otherwise keep current.
+        if skopeo inspect "docker://quay.io/stackstate/stackstate-k8s-process-agent:${HASH}" >/dev/null 2>&1; then
+          printf '%s' "$HASH"
+        else
+          echo "stackstate-k8s-process-agent:${HASH} not built yet; keeping current tag $CURRENT" >&2
+          printf '%s' "$CURRENT"
+        fi
+  agentHash:
+    name: "stackstate-agent latest commit hash"
+    kind: shell
+    scmid: default
+    spec:
+      command: |
+        set -euo pipefail
+
+        VALUES_FILE="stable/suse-observability-agent/values.yaml"
+        # node-, cluster- and checks-agent share this tag; clusterAgent is the canonical read.
+        CURRENT="$(yq -r '.clusterAgent.image.tag' "$VALUES_FILE")"
+        if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
+          echo "Could not read current agent image tag from $VALUES_FILE" >&2
+          exit 1
+        fi
+
+        HASH="$(curl -sf "https://api.github.com/repos/StackVista/stackstate-agent/commits/stackstate-7.78.2" | jq -r '.sha[0:8]' || true)"
+        if [ -z "$HASH" ] || [ "$HASH" = "null" ]; then
+          echo "Could not resolve stackstate-agent commit hash; keeping current tag $CURRENT" >&2
+          printf '%s' "$CURRENT"
+          exit 0
+        fi
+
+        # The hash feeds the node-, cluster- and checks-agent image tags. Only bump
+        # to the new hash once every consumed image exists; otherwise keep current.
+        all_built=true
+        for image in \
+          "quay.io/stackstate/stackstate-k8s-agent:${HASH}" \
+          "quay.io/stackstate/stackstate-k8s-cluster-agent:${HASH}"; do
+          if ! skopeo inspect "docker://${image}" >/dev/null 2>&1; then
+            echo "${image} not built yet; keeping current tag $CURRENT" >&2
+            all_built=false
+            break
+          fi
+        done
+
+        if [ "$all_built" = "true" ]; then
+          printf '%s' "$HASH"
+        else
+          printf '%s' "$CURRENT"
+        fi
+
+# Single pipeline: each target reads from its own sourceid.
 # All suse-observability subchart image tags are in stable/suse-observability/values.yaml
 # (victoria-metrics-0/1 are aliases for victoria-metrics-single subchart).
 targets:
@@ -286,7 +324,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: clickhouse
-    dependson: ["target#clickhouseBackup"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -297,7 +334,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: containerTools
-    dependson: ["target#clickhouse"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -308,7 +344,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: containerTools
-    dependson: ["target#containerToolsSuseObservability"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -319,7 +354,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: containerTools
-    dependson: ["target#containerToolsVictoriaMetrics"]
     spec:
       file: "stable/suse-observability-agent/values.yaml"
       key: "$.httpHeaderInjectorWebhook.certificatePrehook.image.tag"
@@ -328,7 +362,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: elasticsearch
-    dependson: ["target#containerToolsSuseObservabilityAgent"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.elasticsearch.imageTag"
@@ -337,7 +370,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: elasticsearchExporter
-    dependson: ["target#elasticsearch"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.elasticsearch.prometheus-elasticsearch-exporter.image.tag"
@@ -346,20 +378,30 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: envoy
-    dependson: ["target#elasticsearchExporter"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.stackstate.components.router.image.tag"
+  httpHeaderInjectorProxy:
+    name: "http-header-injector-proxy"
+    kind: yaml
+    scmid: "default"
+    sourceid: httpHeaderInjectorProxy
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.httpHeaderInjectorWebhook.proxy.image.tag"
+  httpHeaderInjectorProxyInit:
+    name: "http-header-injector-proxy-init"
+    kind: yaml
+    scmid: "default"
+    sourceid: httpHeaderInjectorProxyInit
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.httpHeaderInjectorWebhook.proxyInit.image.tag"
   hadoop:
     name: "hadoop"
     kind: yaml
     scmid: "default"
     sourceid: hadoop
-    dependson: ["target#envoy"]
-    transformers:
-      - findsubmatch:
-          pattern: '^\d+\.\d+\.\d+-(.+)$'
-          captureindex: 1
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.hbase.hdfs.version"
@@ -368,7 +410,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: jmxExporter
-    dependson: ["target#hadoop"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.kafka.metrics.jmx.image.tag"
@@ -377,7 +418,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: kafka
-    dependson: ["target#jmxExporter"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -388,7 +428,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: kubernetesRbacAgent
-    dependson: ["target#kafka"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.kubernetes-rbac-agent.containers.rbacAgent.image.tag"
@@ -397,7 +436,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: kubernetesRbacAgent
-    dependson: ["target#kubernetesRbacAgent"]
     spec:
       file: "stable/suse-observability-agent/values.yaml"
       key: "$.kubernetes-rbac-agent.containers.rbacAgent.image.tag"
@@ -406,16 +444,30 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: nginxPrometheusExporter
-    dependson: ["target#kubernetesRbacAgentSuseObservabilityAgent"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.stackstate.components.nginxPrometheusExporter.image.tag"
+  suseObservabilityMcp:
+    name: "suse-observability-mcp"
+    kind: yaml
+    scmid: "default"
+    sourceid: suseObservabilityMcp
+    spec:
+      file: "stable/suse-observability/values.yaml"
+      key: "$.stackstate.components.mcp.image.tag"
+  suseObservabilityBorg:
+    name: "suse-observability-borg"
+    kind: yaml
+    scmid: "default"
+    sourceid: suseObservabilityBorg
+    spec:
+      file: "stable/suse-observability/values.yaml"
+      key: "$.stackstate.components.aiAssistant.image.tag"
   victoriaMetrics:
     name: "victoria-metrics (victoria-metrics-0/1 server)"
     kind: yaml
     scmid: "default"
     sourceid: victoriaMetrics
-    dependson: ["target#nginxPrometheusExporter"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -426,7 +478,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: vmagent
-    dependson: ["target#victoriaMetrics"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.stackstate.components.vmagent.image.tag"
@@ -435,7 +486,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: vmbackup
-    dependson: ["target#vmagent"]
     spec:
       file: "stable/suse-observability/values.yaml"
       keys:
@@ -446,7 +496,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: vmrestore
-    dependson: ["target#vmbackup"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.victoria-metrics.restore.image.tag"
@@ -455,7 +504,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: wait
-    dependson: ["target#vmrestore"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.global.wait.image.tag"
@@ -464,7 +512,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: workloadObserver
-    dependson: ["target#wait"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.stackstate.components.workloadObserver.image.tag"
@@ -473,7 +520,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: zookeeper
-    dependson: ["target#workloadObserver"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.zookeeper.image.tag"
@@ -482,7 +528,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: kafkaupOperator
-    dependson: ["target#zookeeper"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.kafkaup-operator.image.tag"
@@ -491,16 +536,41 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: stsOpentelemetryCollector
-    dependson: ["target#kafkaupOperator"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.opentelemetry-collector.image.tag"
+  stsOpentelemetryCollectorSuseObservabilityAgent:
+    name: "sts-opentelemetry-collector (suse-observability-agent)"
+    kind: yaml
+    scmid: "default"
+    # Agent collectors use the strict agent BOM image ("-agent" suffixed tag).
+    sourceid: stsOpentelemetryAgentCollector
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.otel.k8sResourceCollector.image.tag"
+  stsOpentelemetryCollectorSuseObservabilityAgentOtelPrometheusScraping:
+    name: "sts-opentelemetry-collector (suse-observability-agent OTel Prometheus scraping)"
+    kind: yaml
+    scmid: "default"
+    # Agent collectors use the strict agent BOM image ("-agent" suffixed tag).
+    sourceid: stsOpentelemetryAgentCollector
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.otel.prometheusScraping.collector.image.tag"
+  stsOpentelemetryCollectorSuseObservabilityAgentTelemetryGateway:
+    name: "sts-opentelemetry-collector (suse-observability-agent OTel telemetry gateway)"
+    kind: yaml
+    scmid: "default"
+    # Agent collectors use the strict agent BOM image ("-agent" suffixed tag).
+    sourceid: stsOpentelemetryAgentCollector
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.otel.telemetryGateway.image.tag"
   genericSidecarInjector:
     name: "generic-sidecar-injector"
     kind: yaml
     scmid: "default"
     sourceid: genericSidecarInjector
-    dependson: ["target#stsOpentelemetryCollector"]
     spec:
       file: "stable/suse-observability-agent/values.yaml"
       key: "$.httpHeaderInjectorWebhook.sidecarInjector.image.tag"
@@ -509,7 +579,6 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: spotlight
-    dependson: ["target#genericSidecarInjector"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.anomaly-detection.image.tag"
@@ -518,25 +587,204 @@ targets:
     kind: yaml
     scmid: "default"
     sourceid: promtail
-    dependson: ["target#spotlight"]
     spec:
       file: "stable/suse-observability-agent/values.yaml"
       key: "$.logsAgent.image.tag"
-  httpHeaderInjectorChartVersion:
-    name: "http-header-injector chart version (suse-observability-agent)"
+  opentelemetryTargetAllocatorSuseObservabilityAgent:
+    name: "opentelemetry-target-allocator (suse-observability-agent)"
     kind: yaml
     scmid: "default"
-    sourceid: httpHeaderInjectorChart
-    dependson: ["target#promtail"]
+    sourceid: opentelemetryTargetAllocator
     spec:
-      file: "stable/suse-observability-agent/Chart.yaml"
-      key: "$.dependencies[0].version"
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.otel.prometheusScraping.targetAllocator.image.tag"
   s3proxy:
     name: "s3proxy"
     kind: yaml
     scmid: "default"
     sourceid: s3proxy
-    dependson: ["target#httpHeaderInjectorChartVersion"]
     spec:
       file: "stable/suse-observability/values.yaml"
       key: "$.s3proxy.image.tag"
+  processAgentTag:
+    name: "process-agent (suse-observability-agent)"
+    kind: yaml
+    scmid: "default"
+    sourceid: processAgentHash
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.nodeAgent.containers.processAgent.image.tag"
+  nodeAgentTag:
+    name: "node-agent (suse-observability-agent)"
+    kind: yaml
+    scmid: "default"
+    sourceid: agentHash
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.nodeAgent.containers.agent.image.tag"
+  clusterAgentTag:
+    name: "cluster-agent (suse-observability-agent)"
+    kind: yaml
+    scmid: "default"
+    sourceid: agentHash
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.clusterAgent.image.tag"
+  checksAgentTag:
+    name: "checks-agent (suse-observability-agent)"
+    kind: yaml
+    scmid: "default"
+    sourceid: agentHash
+    spec:
+      file: "stable/suse-observability-agent/values.yaml"
+      key: "$.checksAgent.image.tag"
+  # updatecli's yaml plugin re-serialises the tag it bumps and only quotes what
+  # go-yaml deems ambiguous, leaving <digits>e<digits> SHAs unquoted — which helm
+  # then coerces to a float (1e+94), producing a wrong image reference. Re-quote
+  # the image tags/versions so the committed values.yaml stays string-typed.
+  #
+  # This MUST run before any target that reads values.yaml (helm-docs / chart
+  # bump): helm-docs reads the unquoted value and would bake the coerced float
+  # into README.md, and a normalize that ran afterwards would fix values.yaml
+  # without regenerating the README. So normalize depends on the tag targets,
+  # and the reader targets depend on normalize. Counterpart check:
+  # scripts/ci/validate_quoted_tags.sh.
+  normalizeSuseObservabilityTags:
+    name: "quote image tags (suse-observability values.yaml)"
+    kind: shell
+    scmid: "default"
+    disablesourceinput: true
+    dependson:
+      - "target#clickhouseBackup"
+      - "target#clickhouse"
+      - "target#containerToolsSuseObservability"
+      - "target#containerToolsVictoriaMetrics"
+      - "target#elasticsearch"
+      - "target#elasticsearchExporter"
+      - "target#envoy"
+      - "target#hadoop"
+      - "target#jmxExporter"
+      - "target#kafka"
+      - "target#kubernetesRbacAgent"
+      - "target#nginxPrometheusExporter"
+      - "target#suseObservabilityMcp"
+      - "target#suseObservabilityBorg"
+      - "target#victoriaMetrics"
+      - "target#vmagent"
+      - "target#vmbackup"
+      - "target#vmrestore"
+      - "target#wait"
+      - "target#workloadObserver"
+      - "target#zookeeper"
+      - "target#kafkaupOperator"
+      - "target#stsOpentelemetryCollector"
+      - "target#spotlight"
+      - "target#s3proxy"
+    spec:
+      command: |
+        set -e
+        bash scripts/ci/quote_image_tags.sh stable/suse-observability
+      changedif:
+        kind: file/checksum
+        spec:
+          files:
+            - stable/suse-observability/values.yaml
+  normalizeSuseObservabilityAgentTags:
+    name: "quote image tags (suse-observability-agent values.yaml)"
+    kind: shell
+    scmid: "default"
+    disablesourceinput: true
+    dependson:
+      - "target#httpHeaderInjectorProxy"
+      - "target#httpHeaderInjectorProxyInit"
+      - "target#containerToolsSuseObservabilityAgent"
+      - "target#kubernetesRbacAgentSuseObservabilityAgent"
+      - "target#genericSidecarInjector"
+      - "target#promtail"
+      - "target#processAgentTag"
+      - "target#nodeAgentTag"
+      - "target#clusterAgentTag"
+      - "target#checksAgentTag"
+      - "target#stsOpentelemetryCollectorSuseObservabilityAgentOtelPrometheusScraping"
+      - "target#stsOpentelemetryCollectorSuseObservabilityAgentTelemetryGateway"
+      - "target#opentelemetryTargetAllocatorSuseObservabilityAgent"
+    spec:
+      command: |
+        set -e
+        bash scripts/ci/quote_image_tags.sh stable/suse-observability-agent
+      changedif:
+        kind: file/checksum
+        spec:
+          files:
+            - stable/suse-observability-agent/values.yaml
+  suseObservabilityHelmDocs:
+    name: "suse-observability README.md (helm-docs)"
+    kind: shell
+    scmid: "default"
+    disablesourceinput: true
+    dependson:
+      - "target#normalizeSuseObservabilityTags"
+    spec:
+      command: |
+        set -e
+
+        VALUES_FILE="stable/suse-observability/values.yaml"
+        BASE_REF="origin/{{ requiredEnv .scm.branchEnv }}"
+
+        # If the suse-observability values file did not change vs the base ref
+        # updatecli started from, skip the helm-docs regeneration.
+        if git diff --quiet "$BASE_REF" -- "$VALUES_FILE"; then
+          echo "suse-observability values unchanged vs $BASE_REF; skipping helm-docs"
+          exit 0
+        fi
+
+        echo "suse-observability values changed vs $BASE_REF; regenerating README.md with helm-docs"
+        helm-docs --chart-search-root stable/suse-observability
+        echo "Regenerated suse-observability README.md"
+      changedif:
+        kind: file/checksum
+        spec:
+          files:
+            - stable/suse-observability/README.md
+  suseObservabilityAgentChartVersion:
+    name: "suse-observability-agent Chart.yaml version"
+    kind: shell
+    scmid: "default"
+    disablesourceinput: true
+    dependson:
+      - "target#normalizeSuseObservabilityAgentTags"
+    spec:
+      command: |
+        set -e
+
+        PYTHON_BIN="$(command -v python3.11 || command -v python3 || true)"
+        if [ -z "$PYTHON_BIN" ]; then
+          echo "python3 is required to bump the suse-observability-agent chart version" >&2
+          exit 1
+        fi
+
+        VALUES_FILE="stable/suse-observability-agent/values.yaml"
+        CHART_YAML="stable/suse-observability-agent/Chart.yaml"
+        BASE_REF="origin/{{ requiredEnv .scm.branchEnv }}"
+
+        # If neither the agent values file nor Chart.yaml changed compared to
+        # the base ref updatecli started from, skip the chart bump.
+        if git diff --quiet "$BASE_REF" -- "$VALUES_FILE" "$CHART_YAML"; then
+          echo "Agent values and Chart.yaml unchanged vs $BASE_REF; skipping chart bump"
+          exit 0
+        fi
+
+        echo "Agent chart files changed vs $BASE_REF; bumping suse-observability-agent chart version"
+
+        # Helm repos required for bump_chart_version.py to regenerate Chart.lock
+        helm repo add stackstate https://helm.stackstate.io >/dev/null 2>&1 || true
+        helm repo update >/dev/null 2>&1 || true
+
+        "$PYTHON_BIN" scripts/bump-chart-version/bump_chart_version.py suse-observability-agent
+        echo "Bumped suse-observability-agent chart version"
+      changedif:
+        kind: file/checksum
+        spec:
+          files:
+            - stable/suse-observability-agent/Chart.yaml
+            - stable/suse-observability-agent/Chart.lock

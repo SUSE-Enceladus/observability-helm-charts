@@ -29,7 +29,7 @@ global:
       # global.wait.image.repository -- Base container image repository for wait containers.
       repository: stackstate/wait
       # global.wait.image.tag -- Container image tag for wait containers.
-      tag: 1.0.12-9657337c-release-192
+      tag: "1.0.12-so8"
       # global.wait.image.pullPolicy -- Image pull policy for wait containers.
       pullPolicy: IfNotPresent
   # global.suseObservability -- Simplified configuration section that allows users to specify high-level settings.
@@ -141,6 +141,8 @@ backup:
         # backup.storage.backend.azure.endpoint -- Azure blob endpoint (auto-derived from accountName if not set)
         endpoint: ""
   elasticsearch:
+    # backup.elasticsearch.enabled -- Enable scheduled ElasticSearch snapshots (creation of the SLM policy). Set to false to disable (do NOT use an invalid cron schedule). Only takes effect when global.backup.enabled is true.
+    enabled: true
     # backup.elasticsearch.bucketName -- Name of the storage bucket where ElasticSearch snapshots are stored.
     bucketName: 'sts-elasticsearch-backup'
     # backup.elasticsearch.s3Prefix -- Prefix (dir name) used to store backup files.
@@ -169,6 +171,8 @@ backup:
     # backup.poddisruptionbudget.maxUnavailable -- Maximum number of pods that can be unavailable during the backup.
     maxUnavailable: 0
   stackGraph:
+    # backup.stackGraph.enabled -- Enable scheduled StackGraph backups. Set to false to disable (do NOT use an invalid cron schedule). Only takes effect when global.backup.enabled is true.
+    enabled: true
     # backup.stackGraph.bucketName -- Name of the storage bucket to store StackGraph backups.
     bucketName: 'sts-stackgraph-backup'
     # backup.stackGraph.s3Prefix -- Prefix (dir name) used to store backup files.
@@ -182,15 +186,25 @@ backup:
         # backup.stackGraph.restore.tmpData.storageClass -- Storage class of the volume for temporary backup data.
         storageClass:
     scheduled:
+      # backup.stackGraph.scheduled.implementation -- Allows choosing the backup implementation to run on a schedule, can be "v1", "v2" or "all". For now the default is "v1", due to the v2 system not declared 'stable' yet. Not-schedule jobs will be suspended.
+      implementation: "v1"
       # backup.stackGraph.scheduled.schedule -- Cron schedule for automatic StackGraph backups in [Kubernetes cron schedule syntax](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#cron-schedule-syntax).
       schedule: "0 3 * * *"
       # backup.stackGraph.scheduled.backupRetentionTimeDelta -- Time to keep StackGraph backups in. The value is passed to GNU date tool  to determine a specific date, and files older than this date will be deleted.
       backupRetentionTimeDelta: "30 days ago"
       tempData:
+        # backup.stackGraph.scheduled.v2.tmpData.accessModes -- Access mode for temporary backup data.
+        accessModes: ["ReadWriteOnce"]
+        # backup.stackGraph.scheduled.v2.tmpData.size -- Size of volume for temporary backup data -- only used as a buffer for sending data to s3, so does not need to fit a complete backup.
+        size: null
+        # backup.stackGraph.scheduled.v2.tmpData.storageClass -- Storage class of the volume for temporary backup data.
+        storageClass:
+    v2:
+      tempData:
         # backup.stackGraph.scheduled.tmpData.accessModes -- Access mode for temporary backup data.
         accessModes: ["ReadWriteOnce"]
         # backup.stackGraph.scheduled.tmpData.size -- Size of volume for temporary backup data -- must be large enough to store a single backup. It defaults to a datanode size on Distributed Mode and to the stackgraph size on Mono mode.
-        size: null
+        size: "20Gi"
         # backup.stackGraph.scheduled.tmpData.storageClass -- Storage class of the volume for temporary backup data.
         storageClass:
     securityContext:
@@ -205,6 +219,8 @@ backup:
       # backup.stackGraph.securityContext.runAsUser -- The UID (user ID) of the owning user of the process
       runAsUser: 65534
   configuration:
+    # backup.configuration.enabled -- Enable scheduled configuration/settings backups. Set to false to disable (do NOT use an invalid cron schedule). Runs independently of global.backup.enabled (writes a local settings snapshot); the remote upload step is separately gated by global.backup.enabled.
+    enabled: true
     # backup.configuration.bucketName -- Name of the storage bucket to store configuration backups.
     bucketName: 'sts-configuration-backup'
     # backup.configuration.s3Prefix -- Prefix (dir name) used to store backup files.
@@ -306,7 +322,7 @@ scc:
 ai:
   # ai.assistant -- AI Assistant & MCP Server. Entitlement: Included with SUSE Observability (Rancher Prime)
   assistant:
-    # ai.assistant.enabled -- Enables the AI Assistant UI, the dedicated backend process, and the MCP (Model Context Protocol) Server for Observability.
+    # ai.assistant.enabled -- Enables the AI Assistant UI, the dedicated backend process, and the MCP (Model Context Protocol) Server for Observability. Enabling the AI Assistant always enables the MCP Server.
     enabled: false
     # ai.assistant.provider -- LLM provider for AI Assistant. Possible values: `bedrock` or `anthropic`.
     provider: bedrock
@@ -321,6 +337,10 @@ ai:
     bedrock:
       # ai.assistant.bedrock.awsRegion -- AWS region used when `ai.assistant.provider=bedrock`.
       awsRegion: eu-west-1
+  # ai.mcp -- MCP (Model Context Protocol) Server for use with external code assistants. Entitlement: Included with SUSE Observability (Rancher Prime)
+  mcp:
+    # ai.mcp.enabled -- Enables the MCP Server for use with external code assistants, without enabling the AI Assistant or configuring an LLM provider. The MCP Server is also enabled automatically when `ai.assistant.enabled=true`.
+    enabled: false
   # ai.platformOptimization -- Automatic Troubleshooting & Remediation. Entitlement: Requires 'SUSE Platform Optimization' add-on (part of Rancher Suite). Enabling this flag indicates you have the appropriate license for Platform Optimization.
   platformOptimization:
     # ai.platformOptimization.enabled -- Enables advanced AI-driven automatic troubleshooting extensions. This builds upon the AI Assistant framework to provide proactive issue resolution.
@@ -355,11 +375,11 @@ stackstate:
         pullPolicy: IfNotPresent
         # When changing this value make sure to also update hbase.stackgraph.version to the matching StackGraph version
         # stackstate.components.all.image.tag -- The default tag used for all stateless components of StackState; individual service `tag`s can be overridden (see below).
-        tag: 7.0.0-snapshot.20260422182548-master-1ca1362
+        tag: "7.0.0-snapshot.20260811093110-master-b369afe"
       # stackstate.components.all.podAnnotations -- Extra annotations
       podAnnotations: {}
       metrics:
-        defaultAgentMetricsFilter: '["kafka_consumer_consumer_fetch_manager_metrics*", "kafka_producer_producer_topic_metrics*", "jvm*", "akka_http_requests_active", "stackstate*", "receiver*", "stackgraph*", "caffeine*"]'
+        defaultAgentMetricsFilter: '["kafka_consumer_consumer_fetch_manager_metrics*", "kafka_producer_producer_topic_metrics*", "jvm*", "pekko_http_requests_active", "stackstate*", "receiver*", "stackgraph*", "caffeine*"]'
         # stackstate.components.all.metrics.enabled -- Enable metrics port.
         enabled: true
         # stackstate.components.all.metrics.agentAnnotationsEnabled -- Put annotations on each pod to instruct the stackstate agent to scrape the metrics
@@ -827,7 +847,7 @@ stackstate:
         # stackstate.components.mcp.image.repository -- Repository of the mcp component Docker image.
         repository: stackstate/suse-observability-mcp
         # stackstate.components.mcp.image.tag -- Tag used for the `mcp` component Docker image; this will override `stackstate.components.all.image.tag` on a per-service basis.
-        tag: "20260326141755-fe7a6469"
+        tag: "20260804042728-6608c5f9"
       # stackstate.components.mcp.replicaCount -- Number of `mcp` replicas.
       replicaCount: 1
       # stackstate.components.mcp.podAnnotations -- Extra annotations
@@ -866,7 +886,7 @@ stackstate:
         # stackstate.components.aiAssistant.image.repository -- Repository of the ai-assistant component Docker image.
         repository: stackstate/suse-observability-borg
         # stackstate.components.aiAssistant.image.tag -- Tag used for the `ai-assistant` component Docker image; this will override `stackstate.components.all.image.tag` on a per-service basis.
-        tag: "20260318165448-8cc501ea"
+        tag: "20260804044009-ff93fb37"
       serviceAccount:
         # stackstate.components.aiAssistant.serviceAccount.annotations -- Annotations for the ai-assistant `ServiceAccount`. Useful for e.g. AWS IAM Role binding via IRSA: `eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-ai-assistant-role`.
         annotations: {}
@@ -1094,6 +1114,9 @@ stackstate:
       accesslog:
         # stackstate.components.router.accesslog.enabled -- Enable access logging on the router
         enabled: false
+      secureCookies:
+        # stackstate.components.router.secureCookies.enabled -- When enabled, the router appends the `Secure` attribute to `Set-Cookie` response headers for requests that reached the edge over HTTPS (detected via the `X-Forwarded-Proto: https` header set by a TLS-terminating proxy such as Traefik or an ingress controller). Plain-HTTP deployments are left untouched.
+        enabled: false
       # stackstate.components.router.envsFromExistingSecrets -- Configure environment variables from existing secrets.
       # envsFromExistingSecret
       # - name: MY_SECRET_ENV_VAR
@@ -1116,7 +1139,7 @@ stackstate:
         # stackstate.components.router.image.repository -- Repository of the router component Docker image.
         repository: stackstate/envoy
         # stackstate.components.router.image.tag -- Tag used for the `router` component Docker image; this will override `stackstate.components.all.image.tag` on a per-service basis.
-        tag: 1.37.1-1.13-release
+        tag: "1.38.3-so2"
       # stackstate.components.router.podAnnotations -- Extra annotations
       podAnnotations: {}
       # stackstate.components.router.poddisruptionbudget -- PodDisruptionBudget settings for `router` pods.
@@ -1155,7 +1178,7 @@ stackstate:
           # stackstate.components.router.mode.image.repository -- Base container image repository for router mode containers.
           repository: stackstate/container-tools
           # stackstate.components.router.mode.image.tag -- Container image tag for router mode containers.
-          tag: 1.8.5-653
+          tag: "1.8.6-so18"
           # stackstate.components.router.mode.image.pullPolicy -- Image pull policy for router mode containers.
           pullPolicy:
         # stackstate.components.router.mode.resources -- Resource allocation for `router.mode` pods.
@@ -1435,7 +1458,7 @@ stackstate:
         # stackstate.components.clickhouseCleanup.image.repository -- Repository where to get the image from.
         repository: stackstate/clickhouse
         # stackstate.components.clickhouseCleanup.image.tag -- Container image tag for 'clickhouseCleanup' containers.
-        tag: 25.9.5-c65c568c-release-166
+        tag: "26.5.1-so7"
         # stackstate.components.clickhouseCleanup.image.pullPolicy -- Image pull policy `clickhouseCleanup` containers.
         pullPolicy: IfNotPresent
       # stackstate.components.clickhouseCleanup.resources -- Resource allocation for `clickhouseCleanup` pods.
@@ -1481,7 +1504,7 @@ stackstate:
         # stackstate.components.kafkaTopicCreate.image.repository -- Base container image repository for kafka-topic-create containers.
         repository: stackstate/kafka
         # stackstate.components.kafkaTopicCreate.image.tag -- Container image tag for kafka-topic-create containers.
-        tag: 3.9.1-9.2-release
+        tag: "3.9.2-so16"
         # stackstate.components.kafkaTopicCreate.image.pullPolicy -- Image pull policy for kafka-topic-create containers.
         pullPolicy: IfNotPresent
       # stackstate.components.kafkaTopicCreate.resources -- Resource allocation for `kafkaTopicCreate` pods.
@@ -1518,7 +1541,7 @@ stackstate:
         # stackstate.components.nginxPrometheusExporter.image.repository -- Base container image repository for nginx-prometheus-exporter containers.
         repository: stackstate/nginx-prometheus-exporter
         # stackstate.components.nginxPrometheusExporter.image.tag -- Container image tag for nginx-prometheus-exporter containers.
-        tag: 1.5.1-fdbee6c2-111-release
+        tag: "1.5.1-so12"
         # stackstate.components.nginxPrometheusExporter.image.pullPolicy -- Image pull policy for nginx-prometheus-exporter containers.
         pullPolicy: IfNotPresent
     containerTools:
@@ -1528,7 +1551,7 @@ stackstate:
         # stackstate.components.containerTools.image.repository -- Base container image repository for container-tools containers.
         repository: stackstate/container-tools
         # stackstate.components.containerTools.image.tag -- Container image tag for container-tools containers.
-        tag: 1.8.5-653
+        tag: "1.8.6-so18"
         # stackstate.components.containerTools.image.pullPolicy -- Image pull policy for container-tools containers.
         pullPolicy: IfNotPresent
       # stackstate.components.containerTools.resources -- Resource allocation for `kafkaTopicCreate` pods.
@@ -1544,7 +1567,7 @@ stackstate:
     vmagent:
       image:
         repository: stackstate/vmagent
-        tag: v1.136.0-068f508b-release-150
+        tag: "1.144.0-so11"
       # stackstate.components.vmagent.poddisruptionbudget -- PodDisruptionBudget settings for `vmagent` pods.
       poddisruptionbudget:
         maxUnavailable: 1
@@ -1585,7 +1608,7 @@ stackstate:
         # stackstate.components.workloadObserver.image.repository -- Repository of the workloadObserver component Docker image.
         repository: stackstate/workload-observer
         # stackstate.components.workloadObserver.image.tag -- Tag used for the `workloadObserver` component Docker image..
-        tag: 864f55e0-164-release
+        tag: "40b2a4b2-1023-release"
       # stackstate.components.workloadObserver.podAnnotations -- Extra annotations
       podAnnotations: {}
       # stackstate.components.workloadObserver.resources -- Resource allocation for `workloadObserver` pods.
@@ -1614,13 +1637,13 @@ stackstate:
   authentication:
     # stackstate.authentication.fromExternalSecret -- Use an external secret for the authenticated secrets. This suppresses secret creation by StackState and gets the data from the secret with the provided name.
     fromExternalSecret:
-    # stackstate.authentication.keycloak -- Use Keycloak as authentication provider. See [Configuring Keycloak](#configuring-keycloak).
+    # stackstate.authentication.keycloak -- Use Keycloak as authentication provider. See [Configuring Keycloak](#configuring-keycloak). Set `oidcLogout: true` inside this block to enable OIDC RP-initiated logout and `skipLoginPage: true` to redirect straight to Keycloak (both default false).
     keycloak: {}
     # stackstate.authentication.ldap -- LDAP settings for StackState. See [Configuring LDAP](#configuring-ldap).
     ldap: {}
-    # stackstate.authentication.oidc -- Use an OpenId Connect provider for authentication. See [Configuring OpenId Connect](#configuring-openid-connect).
+    # stackstate.authentication.oidc -- Use an OpenId Connect provider for authentication. See [Configuring OpenId Connect](#configuring-openid-connect). Set `oidcLogout: true` inside this block to enable OIDC RP-initiated logout and `skipLoginPage: true` to redirect straight to the provider (both default false).
     oidc: {}
-    # stackstate.authentication.rancher -- Use Rancher as an OpenId Connect provider for authentication. See [Configuring Rancher authentication](#configuring-rancher-authentication).
+    # stackstate.authentication.rancher -- Use Rancher as an OpenId Connect provider for authentication. See [Configuring Rancher authentication](#configuring-rancher-authentication). Set `oidcLogout: true` inside this block to enable OIDC RP-initiated logout and `skipLoginPage: true` to redirect straight to Rancher (both default false).
     rancher: {}
     # stackstate.authentication.file -- Configure users, their passwords and roles from (config) file
     file: {}
@@ -1732,7 +1755,9 @@ stackstate:
     installed: []
     # stackstate.stackpacks.upgradeOnStartup -- Specify additional stackpacks that will, on startup only, be upgraded to the latest version available.
     # Note: The following StackPacks are automatically upgraded with SUSE Observability:
-    # kubernetes-v2, open-telemetry, stackstate-k8s-agent-v2, aad-v2, stackstate, plus either prime-kubernetes or community-kubernetes (based on stackstate.deployment.edition).
+    # kubernetes-v2, open-telemetry, stackstate-k8s-agent-v2, aad-v2, plus either prime-kubernetes or community-kubernetes (based on stackstate.deployment.edition).
+    # When StackPacks 2.0 is disabled (default): stackstate is also upgraded.
+    # When StackPacks 2.0 is enabled: otel-k8s-crd and suse-observability are upgraded instead of stackstate (suse-observability triggers the cross-name migration from stackstate via successorMapping).
     # Additional StackPacks declared in upgradeOnStartup will be merged with these defaults.
     upgradeOnStartup: []
     # stackstate.stackpacks.source -- Source of the stackpacks, for now just the docker-image.
@@ -1746,17 +1771,43 @@ stackstate:
     pvc:
       size: 1Gi
       storageClass:
-    image:
-      # stackstate.stackpacks.image.registry -- `registry` used for the `stackpacks` Docker image; this will override `global.imageRegistry` on a per-service basis.
-      registry: "quay.io"
-      # stackstate.stackpacks.image.pullPolicy -- `pullPolicy` used for the `stackpacks` Docker image; this will override `stackstate.components.all.image.pullPolicy` on a per-service basis.
-      pullPolicy: ""
-      # stackstate.stackpacks.image.repository -- Repository of the `stackpacks` Docker image.
-      repository: stackstate/stackpacks
-      # stackstate.stackpacks.image.version -- Version used for the `stackpacks` Docker image, the tag is build from the version and the stackstate edition + deployment mode
-      version: "20260421152824-master-f02a31b"
-      # stackstate.stackpacks.image.deploymentModeOverride -- Use the stackpacks from another deployment mode than StackState is running in
-      deploymentModeOverride: ""
+    images:
+      # stackstate.stackpacks.images[0].name -- name for the init container
+      - name: "v1"
+        # stackstate.stackpacks.images[0].registry -- `registry` used for the `stackpacks` Docker image; this will override `global.imageRegistry` on a per-service basis.
+        registry: "quay.io"
+        # stackstate.stackpacks.images[0].pullPolicy -- `pullPolicy` used for the `stackpacks` Docker image; this will override `stackstate.components.all.image.pullPolicy` on a per-service basis.
+        pullPolicy: ""
+        # stackstate.stackpacks.images[0].repository -- Repository of the `stackpacks` Docker image.
+        repository: stackstate/stackpacks
+        # stackstate.stackpacks.images[0].version -- Version used for the `stackpacks` Docker image, the tag is build from the version and the stackstate edition + deployment mode
+        version: "20260805125152-master-01db26c"
+        # stackstate.stackpacks.images[0].deploymentModeOverride -- Use the stackpacks from another deployment mode than StackState is running in
+        deploymentModeOverride: ""
+        # stackstate.stackpacks.images[1].name -- name for the init container
+      - name: contrib
+        # stackstate.stackpacks.images[1].registry -- `registry` used for the `stackpacks` Docker image; this will override `global.imageRegistry` on a per-service basis.
+        registry: "quay.io"
+        # stackstate.stackpacks.images[1].pullPolicy -- `pullPolicy` used for the `stackpacks` Docker image; this will override `stackstate.components.all.image.pullPolicy` on a per-service basis.
+        pullPolicy: ""
+        # stackstate.stackpacks.images[1].repository -- Repository of the `stackpacks` Docker image.
+        repository: stackstate/contrib-stackpacks
+        # stackstate.stackpacks.images[1].tag -- Tag used for the `stackpacks` Docker image
+        tag: "20260810143335-main-2ba911a"
+        # stackstate.stackpacks.images[2].name -- name for the init container
+      - name: suse
+        # stackstate.stackpacks.images[2].registry -- `registry` used for the `stackpacks` Docker image; this will override `global.imageRegistry` on a per-service basis.
+        registry: "quay.io"
+        # stackstate.stackpacks.images[2].pullPolicy -- `pullPolicy` used for the `stackpacks` Docker image; this will override `stackstate.components.all.image.pullPolicy` on a per-service basis.
+        pullPolicy: ""
+        # stackstate.stackpacks.images[2].repository -- Repository of the `stackpacks` Docker image.
+        repository: stackstate/suse-stackpacks
+        # stackstate.stackpacks.images[2].tag -- Tag used for the `stackpacks` Docker image
+        tag: "20260810142159-main-5610cbd"
+        # stackstate.stackpacks.images[2].editions -- Editions that include the stackpacks
+        editions: ["Prime"]
+    # stackstate.stackpacks.extraImages -- Additional stackpack Docker images to mount after the built-in stackpack images.
+    extraImages: []
   ui:
     # stackstate.ui.defaultTimeRange -- Default time range  in the UI. One of LAST_5_MINUTES, LAST_15_MINUTES, LAST_30_MINUTES, LAST_1_HOUR, LAST_3_HOURS, LAST_6_HOURS, LAST_12_HOURS, LAST_24_HOURS, LAST_2_DAYS. No value or an unsupported value will automatically fall-back to LAST_1_HOUR.
     defaultTimeRange:
@@ -1765,7 +1816,7 @@ stackstate:
 ##############################
 elasticsearch:
   # elasticsearch.imageTag -- Elasticsearch image tag. Updated by updatecli.
-  imageTag: 8.19.4-c4527168-release-213
+  imageTag: "8.19.16-so10"
   # elasticsearch.esJavaOpts -- JVM options
   esJavaOpts: null
   # elasticsearch.replicas -- Number of Elasticsearch replicas.
@@ -1782,7 +1833,7 @@ elasticsearch:
   prometheus-elasticsearch-exporter:
     # elasticsearch.prometheus-elasticsearch-exporter.image.tag -- Elasticsearch Prometheus exporter image tag. Updated by updatecli.
     image:
-      tag: v1.10.0-6159e1ba-release-174
+      tag: "1.10.0-so12"
     resources: {}
 hbase:
   hbase:
@@ -1793,8 +1844,8 @@ hbase:
       # hbase.hbase.regionserver.replicaCount -- Number of HBase regionserver node replicas. Will be overridden by sizing profile if using global.suseObservability.sizing.profile.
       replicaCount: null
   hdfs:
-    # hbase.hdfs.version -- HDFS image build version (e.g. java21-8-27156f06-353). Derived from hadoop docker tag with semver prefix stripped. Updated by updatecli.
-    version: java21-8-aef270ee-release-366
+    # hbase.hdfs.version -- Full HDFS image tag. Updated by updatecli.
+    version: "3.5.0-so12"
     datanode:
       # hbase.hdfs.datanode.replicaCount -- Number of HDFS datanode replicas. Will be overridden by sizing profile if using global.suseObservability.sizing.profile.
       replicaCount: null
@@ -1802,7 +1853,7 @@ hbase:
     # hbase.tephra.replicaCount -- Number of Tephra replicas. Will be overridden by sizing profile if using global.suseObservability.sizing.profile.
     replicaCount: null
   stackgraph:
-    version: 7.14.1
+    version: "8.3.4"
 kafkaup-operator:
   enabled: true
   image:
@@ -1811,7 +1862,7 @@ kafkaup-operator:
     # kafkaup.image.repository -- Repository containing the image for the KafkaUp operator
     repository: stackstate/kafkaup-operator
     # kafkaup.image.tag -- Tag of the image for the KafkaUp operator
-    tag: 0.0.7
+    tag: "0.0.13"
     # kafkaup.image.pullPolicy -- Pull policy for the image:pod for the KafkaUp operator
     pullPolicy: ""
   kafkaSelectors:
@@ -1833,7 +1884,7 @@ kafka:
     # kafka.image.tag -- Kafka image tag. **Since StackState relies on this specific version, it's advised NOT to change this.**
     # When changing this version, be sure to change the pod annotation stackstate.com/kafkaup-operator.kafka_version aswell, in order
     # for the kafkaup operator to upgrade the inter broker protocol version
-    tag: 3.9.1-9.2-release
+    tag: "3.9.2-so16"
   metrics:
     jmx:
       image:
@@ -1842,7 +1893,7 @@ kafka:
         # kafka.metrics.jmx.image.repository -- Kafka JMX exporter image repository
         repository: stackstate/jmx-exporter
         # kafka.metrics.jmx.image.tag -- Kafka JMX exporter image tag
-        tag: 0.20.0-58a72255-307-release
+        tag: "0.20.0-so10"
       resources:
         limits:
           cpu: "1"
@@ -1908,7 +1959,7 @@ s3proxy:
     # s3proxy.image.repository -- Image repository for S3Proxy
     repository: stackstate/s3proxy
     # s3proxy.image.tag -- Image tag for S3Proxy
-    tag: 3.1.0-c7312e71-release-22
+    tag: "3.2.0-so9"
     # s3proxy.image.pullPolicy -- Image pull policy for S3Proxy
     pullPolicy: IfNotPresent
   # s3proxy.resources -- Resource limits and requests for S3Proxy container
@@ -1953,11 +2004,11 @@ s3proxy:
     # s3proxy.securityContext.runAsNonRoot -- Ensure that the user is not root (!= 0)
     runAsNonRoot: true
     # s3proxy.securityContext.runAsUser -- The UID (user ID) of the owning user of the process
-    runAsUser: 65534
+    runAsUser: 1001
     # s3proxy.securityContext.runAsGroup -- The GID (group ID) of the owning user of the process
-    runAsGroup: 65534
+    runAsGroup: 1001
     # s3proxy.securityContext.fsGroup -- The GID (group ID) used to mount volumes
-    fsGroup: 65534
+    fsGroup: 1001
   metrics:
     # s3proxy.metrics.enabled -- Enable / disable S3Proxy Prometheus metrics.
     enabled: true
@@ -1976,7 +2027,7 @@ zookeeper:
     # zookeeper.image.repository -- ZooKeeper image repository
     repository: stackstate/zookeeper
     # zookeeper.image.tag -- ZooKeeper image tag
-    tag: 3.9.3-352e04a1-315-release
+    tag: "3.9.5-so19"
   resources: {}
   # zookeeper.replicaCount -- Default amount of Zookeeper replicas to provision. Will be overridden by sizing profile if using global.suseObservability.sizing.profile.
   replicaCount: null
@@ -1988,7 +2039,7 @@ anomaly-detection:
   enabled: false
   image:
     # anomaly-detection.image.tag -- the chart image tag, e.g. 4.1.3-latest
-    tag: 5.2.0-snapshot.192
+    tag: "5.2.0-snapshot.217"
     # anomaly-detection.image.registry -- Base container image registry for all containers, except for the wait container
     registry: quay.io
     # anomaly-detection.image.spotlightRepository -- Repository of the spotlight Docker image.
@@ -2011,7 +2062,7 @@ victoria-metrics-0:
   server:
     # victoria-metrics-0.server.image.tag -- Victoria Metrics server image tag. Updated by updatecli.
     image:
-      tag: v1.136.0-621be04a-release-156
+      tag: "1.144.0-so11"
     # victoria-metrics-0.server.fullnameOverride -- Full name override
     fullnameOverride: suse-observability-victoria-metrics-0
     persistentVolume:
@@ -2020,14 +2071,16 @@ victoria-metrics-0:
     # victoria-metrics-0.server.resources - CPU/Memory requests and limits
     resources: {}
   backup:
+    # victoria-metrics-0.backup.enabled -- Enable scheduled backups of this Victoria Metrics instance. Set to false to disable (do NOT use an invalid cron schedule). Only takes effect when global.backup.enabled is true.
+    enabled: true
     # victoria-metrics-0.backup.setupCron.image.tag -- Container-tools image for cron setup. Updated by updatecli.
     setupCron:
       image:
-        tag: 1.8.5-653
+        tag: "1.8.6-so18"
     # victoria-metrics-0.backup.vmbackup.image.tag -- VM backup image tag. Updated by updatecli.
     vmbackup:
       image:
-        tag: v1.136.0-47ff639a-release-69
+        tag: "1.144.0-so14"
     # victoria-metrics-0.backup.bucketName -- Name of the storage bucket where Victoria Metrics backups are stored.
     bucketName: 'sts-victoria-metrics-backup'
     # victoria-metrics-1.backup.s3Prefix -- Prefix (dir name) used to store backup files, we may have multiple instances of Victoria Metrics, each of them should be stored into their own directory.
@@ -2050,7 +2103,7 @@ victoria-metrics-1:
   server:
     # victoria-metrics-1.server.image.tag -- Victoria Metrics server image tag. Updated by updatecli.
     image:
-      tag: v1.136.0-621be04a-release-156
+      tag: "1.144.0-so11"
     # victoria-metrics-1.server.fullnameOverride -- Full name override
     fullnameOverride: suse-observability-victoria-metrics-1
     persistentVolume:
@@ -2059,14 +2112,16 @@ victoria-metrics-1:
     # victoria-metrics-1.server.resources - CPU/Memory requests and limits
     resources: {}
   backup:
+    # victoria-metrics-1.backup.enabled -- Enable scheduled backups of this Victoria Metrics instance. Set to false to disable (do NOT use an invalid cron schedule). Only takes effect when global.backup.enabled is true.
+    enabled: true
     # victoria-metrics-1.backup.setupCron.image.tag -- Container-tools image for cron setup. Updated by updatecli.
     setupCron:
       image:
-        tag: 1.8.5-653
+        tag: "1.8.6-so18"
     # victoria-metrics-1.backup.vmbackup.image.tag -- VM backup image tag. Updated by updatecli.
     vmbackup:
       image:
-        tag: v1.136.0-47ff639a-release-69
+        tag: "1.144.0-so14"
     # victoria-metrics-1.backup.bucketName -- Name of the storage bucket where Victoria Metrics backups are stored.
     bucketName: 'sts-victoria-metrics-backup'
     # victoria-metrics-1.backup.s3Prefix -- Prefix (dir name) used to store backup files, we may have multiple instances of Victoria Metrics, each of them should be stored into their own directory.
@@ -2092,7 +2147,7 @@ victoria-metrics:
       # victoria-metrics.restore.image.repository -- Base container image repository for 'vmrestore' containers.
       repository: stackstate/vmrestore
       # victoria-metrics.restore.image.tag -- Container image tag for 'vmrestore' containers.
-      tag: v1.136.0-2ca23936-release-52
+      tag: "1.144.0-so13"
       # victoria-metrics.restore.image.pullPolicy -- Image pull policy for `vmrestore` containers.
       pullPolicy: IfNotPresent
     securityContext:
@@ -2113,7 +2168,7 @@ clickhouse:
     # clickhouse.image.repository -- Repository where to get the image from.
     repository: stackstate/clickhouse
     # clickhouse.image.tag -- Container image tag for 'clickhouse' containers.
-    tag: 25.9.5-c65c568c-release-166
+    tag: "26.5.1-so7"
   # clickhouse.replicaCount -- Number of ClickHouse replicas per shard to deploy. When using global.suseObservability.sizing.profile, this value is determined by the sizing profile (1 for most profiles, 3 for 4000-ha).
   replicaCount: null
   persistence:
@@ -2121,54 +2176,28 @@ clickhouse:
     size: null
   resources: {}
   backup:
+    # clickhouse.backup.enabled -- Enable scheduled ClickHouse backups. Set to false to disable (do NOT use an invalid cron schedule). Only takes effect when global.backup.enabled is true.
+    enabled: true
     image:
       # clickhouse.backup.image.registry -- Registry where to get the image from.
       registry: quay.io
       # clickhouse.backup.image.repository -- Repository where to get the image from.
       repository: stackstate/clickhouse-backup
       # clickhouse.backup.image.tag -- Container image tag for 'clickhouse' backup containers.
-      tag: 2.6.43-47a710b2-173-release
+      tag: "2.7.2-so9"
     s3:
       # clickhouse.backup.s3.endpoint -- S3-compatible endpoint for backup storage (resolved from s3proxy).
       endpoint: '{{ include "stackstate.s3proxy.endpoint" . }}'
       # clickhouse.backup.s3.secretName -- Name of the secret containing S3 credentials.
       secretName: '{{ include "stackstate.s3proxy.secretName" . }}'
-opentelemetry:
-  # opentelemetry.enabled -- Enable / disable chart-based OTEL.
-  enabled: true
 opentelemetry-collector:
   image:
+    # opentelemetry-collector.image.registry -- Base container image registry.
     registry: quay.io
     # opentelemetry-collector.image.repository -- Repository where to get the image from.
     repository: stackstate/sts-opentelemetry-collector
     # opentelemetry-collector.image.tag -- Container image tag for 'opentelemetry-collector' containers.
-    tag: v0.0.31
-  # opentelemetry-collector.fullnameOverride -- Name override for OTEL collector child chart. **Don't change unless otherwise specified; this is a Helm v2 limitation, and will be addressed in a later Helm v3 chart.**
-  fullnameOverride: suse-observability-otel-collector
-  ports:
-    otlp:
-      # opentelemetry-collector.ports.otlp.appProtocol -- appProtocol for the OTLP gRPC service port. Use `grpc` for nginx ingress or `kubernetes.io/h2c` for Gateway API (e.g. Traefik GRPCRoute).
-      appProtocol: grpc
-  # opentelemetry-collector.mode -- deployment mode of OTEL collector. Valid values are "daemonset", "deployment", and "statefulset".
-  mode: statefulset
-  # opentelemetry-collector.replicaCount -- only used with deployment mode
-  replicaCount: 1
-  # opentelemetry-collector.extraEnvs -- Collector configuration, see: [doc](https://opentelemetry.io/docs/collector/configuration/). Contains API_URL with path to api server used to authorize requests
-  extraEnvs:
-    - name: API_URL
-      valueFrom:
-        configMapKeyRef:
-          name: suse-observability-otel-collector
-          key: api.url
-    - name: INTAKE_URL
-      valueFrom:
-        configMapKeyRef:
-          name: suse-observability-otel-collector
-          key: intake.url
-  podAnnotations:
-    ad.stackstate.com/opentelemetry-collector.check_names: '["openmetrics"]'
-    ad.stackstate.com/opentelemetry-collector.init_configs: "[{}]"
-    ad.stackstate.com/opentelemetry-collector.instances: '[ { "prometheus_url": "http://%%host%%:8888/metrics", "namespace": "stackstate", "metrics": ["*"] } ]'
+    tag: "v0.0.53"
   resources:
     requests:
       cpu: 250m
@@ -2176,15 +2205,6 @@ opentelemetry-collector:
     limits:
       cpu: 500m
       memory: 512Mi
-  initContainers:
-    - name: otel-collector-init
-      image: '{{ include "opentelemetry-collector.waitImageRegistry" . }}/{{ .Values.global.wait.image.repository }}:{{ .Values.global.wait.image.tag }}'
-      imagePullPolicy: IfNotPresent
-      command:
-        - sh
-        - -c
-        - |
-          /entrypoint -c suse-observability-clickhouse:9000,suse-observability-vmagent:8429,suse-observability-kafka-headless:9092 -t 300
 kubernetes-rbac-agent:
   url:
     value: '{{ include "stackstate.rbacAgent.url" . }}'
@@ -2202,7 +2222,7 @@ kubernetes-rbac-agent:
         # kubernetes-rbac-agent.containers.rbacAgent.image.pullPolicy -- Policy when pulling an image
         # pullPolicy:
         # kubernetes-rbac-agent.containers.rbacAgent.image.tag -- The tag for the docker image
-        tag: c96a7ba1-699-release
+        tag: "4ec35439-1024-release"
       resources:
         requests:
           # kubernetes-rbac-agent.containers.rbacAgent.resources.requests.memory -- Memory resource requests.

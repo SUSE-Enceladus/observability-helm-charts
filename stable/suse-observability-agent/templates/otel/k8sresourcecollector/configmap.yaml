@@ -1,0 +1,231 @@
+{{- if include "stackstate-k8s-agent.k8sResourceCollector.enabled" . }}
+{{- $rcfg := include "stackstate-k8s-agent.k8sResourceCollector.mergedValues" . | fromYaml }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-k8s-resource-collector-config
+  labels:
+{{ include "stackstate-k8s-agent.labels" . | indent 4 }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 4 }}
+    app.kubernetes.io/component: k8s-resource-collector
+  annotations:
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      # Self-scrape of the collector's own Prometheus telemetry endpoint (see
+      # service.telemetry.metrics). k8s.pod.uid is attached as a static label so
+      # k8s_attributes can associate these self-metrics with the collector pod.
+      prometheus/self:
+        config:
+          scrape_configs:
+            - job_name: k8s-resource-collector
+              scrape_interval: 30s
+              static_configs:
+                - targets:
+                    - ${env:POD_IP}:8888
+                  labels:
+                    k8s.pod.uid: ${env:POD_UID}
+      # Topology receiver: watches all CRDs and selected CR instances. CRDs are
+      # always emitted; cr_api_groups controls which Custom Resources are watched.
+      # objects can add explicit non-CR watches (for example pods used by an integration).
+      k8sresource:
+        auth_type: serviceAccount
+        cluster_name: {{ .Values.stackstate.cluster.name | quote }}
+        snapshot_interval: {{ .Values.otel.k8sResourceCollector.crDiscovery.snapshotInterval }}
+        discovery_mode: {{ .Values.otel.k8sResourceCollector.crDiscovery.discoveryMode }}
+        max_cr_total_data_size_bytes: {{ .Values.otel.k8sResourceCollector.dataLimits.maxCrTotalDataSizeBytes | int }}
+        max_object_total_data_size_bytes: {{ .Values.otel.k8sResourceCollector.dataLimits.maxObjectTotalDataSizeBytes | int }}
+{{- if eq .Values.otel.k8sResourceCollector.crDiscovery.discoveryMode "api_groups" }}
+{{- $includes := list }}
+{{- range $pattern, $enabled := $rcfg.crDiscovery.apiGroups.include }}
+{{- if $enabled }}{{ $includes = append $includes $pattern }}{{ end }}
+{{- end }}
+{{- if and (has "*" $includes) (gt (len $includes) 1) }}
+{{- $includes = without $includes "*" }}
+{{- end }}
+{{- if not $includes }}
+{{- fail "otel.k8sResourceCollector.crDiscovery.apiGroups.include must have at least one truthy entry when discoveryMode is 'api_groups' (e.g. \"*\": true)" }}
+{{- end }}
+        cr_api_groups:
+          include:
+{{- range $includes }}
+            - {{ . | quote }}
+{{- end }}
+{{- $excludes := list }}
+{{- range $pattern, $enabled := $rcfg.crDiscovery.apiGroups.exclude }}
+{{- if $enabled }}{{ $excludes = append $excludes $pattern }}{{ end }}
+{{- end }}
+{{- if $excludes }}
+          exclude:
+{{- range $excludes }}
+            - {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+        peer_sync_port: {{ .Values.otel.k8sResourceCollector.peerSync.port }}
+{{- if .Values.otel.k8sResourceCollector.leaderElection.enabled }}
+        peer_sync_dns: {{ include "stackstate-k8s-agent.k8sResourceCollector.peerSync.dns" . | quote }}
+        k8s_leader_elector: k8s_leader_elector
+{{- end }}
+{{- $objects := dict }}
+{{- range $name, $obj := $rcfg.objects }}
+{{- if $obj }}{{ $_ := set $objects $name $obj }}{{ end }}
+{{- end }}
+{{- if $objects }}
+        objects:
+{{- range $name, $obj := $objects }}
+          - name: {{ $name | quote }}
+            group: {{ $obj.group | default "" | quote }}
+{{- if $obj.version }}
+            version: {{ $obj.version | quote }}
+{{- end }}
+{{- if $obj.namespaces }}
+            namespaces:
+{{- range $obj.namespaces }}
+              - {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- if $obj.labelSelector }}
+            label_selector: {{ $obj.labelSelector | quote }}
+{{- end }}
+{{- if $obj.fieldSelector }}
+            field_selector: {{ $obj.fieldSelector | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $denied := dict }}
+{{- range $name, $obj := .Values.otel.k8sResourceCollector.deniedObjects }}
+{{- if $obj }}{{ $_ := set $denied $name $obj }}{{ end }}
+{{- end }}
+{{- if $denied }}
+        denied_objects:
+{{- range $name, $obj := $denied }}
+          - name: {{ $name | quote }}
+            group: {{ $obj.group | default "" | quote }}
+{{- end }}
+{{- end }}
+{{- if .Values.otel.integrations.rancherAgent }}
+        rancher_enrichment:
+          enabled: true
+{{- end }}
+
+    processors:
+      # Step 1 of 3 for self-metrics enrichment: remove any namespace attribute
+      # already present on the scraped collector metrics resource. The Prometheus
+      # receiver should not normally set one, but clearing it makes the enrichment
+      # deterministic: k8sattributes (step 2) repopulates k8s.namespace.name from
+      # the Kubernetes API using the pod uid label above.
+      transform/pre-k8sattributes:
+        error_mode: ignore
+        metric_statements:
+          - context: resource
+            statements:
+              - delete_key(resource.attributes, "k8s.namespace.name")
+      # Step 2 of 3 for self-metrics enrichment: attach pod metadata for the
+      # k8s-resource-collector pod. pod_association first uses the static
+      # k8s.pod.uid label added by prometheus/self and falls back to connection
+      # metadata if needed.
+      k8s_attributes:
+        auth_type: serviceAccount
+        extract:
+          labels:
+            - from: pod
+              key_regex: (.*)
+              tag_name: $$1
+          metadata:
+            - k8s.namespace.name
+            - k8s.deployment.name
+            - k8s.node.name
+            - k8s.pod.name
+            - k8s.pod.uid
+        passthrough: false
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+      # Step 3 of 3 for self-metrics enrichment: stamp the cluster name from
+      # agent configuration and make the self-metrics identify this collector as
+      # its own OTel service component in SUSE Observability.
+      transform/self-metrics:
+        error_mode: ignore
+        metric_statements:
+          - context: resource
+            statements:
+              - set(resource.attributes["k8s.cluster.name"], "${env:K8S_CLUSTER_NAME}")
+              - set(resource.attributes["service.name"], "{{ .Release.Name }}-k8s-resource-collector")
+              - set(resource.attributes["service.instance.id"], resource.attributes["k8s.pod.uid"]) where resource.attributes["service.instance.id"] == nil and resource.attributes["k8s.pod.uid"] != nil
+              - set(resource.attributes["service.namespace"], resource.attributes["k8s.namespace.name"]) where resource.attributes["service.namespace"] == nil and resource.attributes["k8s.namespace.name"] != nil
+      batch: {}
+
+{{- $exporterName := ternary "otlp/suse-observability" "otlp_http/suse-observability" (eq (include "stackstate-k8s-agent.platform.otlp.useGrpc" .) "true") }}
+    exporters:
+      # Send to SUSE Observability platform
+      {{ $exporterName }}:
+        auth:
+          authenticator: bearertokenauth
+        endpoint: ${PLATFORM_OTLP_ENDPOINT}
+        tls:
+          insecure_skip_verify: ${SKIP_SSL_VALIDATION}
+{{- if eq (include "stackstate-k8s-agent.platform.otlp.insecure" .) "true" }}
+          insecure: true
+{{- end }}
+        compression: gzip
+        timeout: 30s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+{{- include "stackstate-k8s-agent.collector.debugExporter.config" .Values.otel.k8sResourceCollector.debug | nindent 6 }}
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+{{- if .Values.otel.k8sResourceCollector.pprof.enabled }}
+      pprof:
+        endpoint: 0.0.0.0:1777
+{{- end }}
+      bearertokenauth:
+        scheme: SUSEObservability
+        token: "${STS_API_KEY}"
+{{- if .Values.otel.k8sResourceCollector.leaderElection.enabled }}
+      k8s_leader_elector:
+        auth_type: serviceAccount
+        lease_name: {{ .Values.otel.k8sResourceCollector.leaderElection.leaseName | quote }}
+        lease_namespace: ${POD_NAMESPACE}
+        lease_duration: {{ .Values.otel.k8sResourceCollector.leaderElection.leaseDuration }}
+        renew_deadline: {{ .Values.otel.k8sResourceCollector.leaderElection.renewDeadline }}
+        retry_period: {{ .Values.otel.k8sResourceCollector.leaderElection.retryPeriod }}
+{{- end }}
+
+    service:
+      telemetry:
+        logs:
+          level: {{ .Values.otel.k8sResourceCollector.logLevel }}
+        # Expose collector self-metrics for prometheus/self and for agent
+        # autodiscovery scraping via pod annotations.
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: ${env:POD_IP}
+                    port: 8888
+      extensions: [health_check, {{ if .Values.otel.k8sResourceCollector.pprof.enabled }}pprof, {{ end }}bearertokenauth{{ if .Values.otel.k8sResourceCollector.leaderElection.enabled }}, k8s_leader_elector{{ end }}]
+      pipelines:
+        # Kubernetes resource discovery - real-time watch of CRDs and custom resources
+        logs/k8s-resource:
+          receivers: [k8sresource]
+          processors: []
+          exporters: [{{ $exporterName }}{{ include "stackstate-k8s-agent.collector.debugExporter.suffix" (dict "debug" .Values.otel.k8sResourceCollector.debug "signal" "logs") }}]
+        # Collector self-metrics: scrape the local telemetry endpoint, enrich with
+        # pod/cluster/service identity, then export to SUSE Observability so the
+        # suse-observability-2 StackPack can monitor receiver health.
+        metrics/self:
+          receivers: [prometheus/self]
+          processors: [transform/pre-k8sattributes, k8s_attributes, transform/self-metrics, batch]
+          exporters: [{{ $exporterName }}{{ include "stackstate-k8s-agent.collector.debugExporter.suffix" (dict "debug" .Values.otel.k8sResourceCollector.debug "signal" "metrics") }}]
+{{- end }}

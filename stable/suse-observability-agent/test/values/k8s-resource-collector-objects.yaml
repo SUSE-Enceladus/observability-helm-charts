@@ -1,0 +1,37 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  url: https://my-suse-observability-instance.com/receiver
+
+# Restricted RBAC + a small Objects/DeniedObjects set to exercise both the
+# configmap render and the auto-derived RBAC rules.
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      discoveryMode: api_groups
+      apiGroups:
+        include:
+          "policies.kubewarden.io": true
+    rbac:
+      useWildcard: false
+    objects:
+      # Core group, namespaced selection — exercises namespaces render.
+      pods:
+        group: ""
+        namespaces:
+          - kube-system
+      # Non-core group with label + field selectors.
+      deployments:
+        group: apps
+        labelSelector: "app in (foo,bar)"
+        fieldSelector: "status.phase=Running"
+      # Second entry under the same non-core group — both must end up in the
+      # single auto-derived rule for the apps group.
+      statefulsets:
+        group: apps
+    deniedObjects:
+      certificates:
+        group: cert-manager.io

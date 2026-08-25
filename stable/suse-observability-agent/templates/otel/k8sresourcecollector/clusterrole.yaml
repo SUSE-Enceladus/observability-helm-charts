@@ -1,0 +1,57 @@
+{{- if include "stackstate-k8s-agent.k8sResourceCollector.enabled" . }}
+{{- $rcfg := include "stackstate-k8s-agent.k8sResourceCollector.mergedValues" . | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-k8s-resource-collector
+  labels:
+{{ include "stackstate-k8s-agent.labels" . | indent 4 }}
+{{ include "stackstate-k8s-agent.global.extraLabels" . | indent 4 }}
+    app.kubernetes.io/component: k8s-resource-collector
+  annotations:
+{{ include "stackstate-k8s-agent.global.extraAnnotations" . | indent 4 }}
+rules:
+  # Permission to watch CustomResourceDefinitions
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+
+{{- if .Values.otel.k8sResourceCollector.rbac.useWildcard }}
+  # Wildcard permissions for watching all custom resources (covers otel.k8sResourceCollector.objects too).
+  # Use this for dynamic CRD discovery in environments with many CRDs.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+{{- else }}
+  # Restricted permissions for specific API groups.
+  # crDiscovery.apiGroups.include grants group-wide access for CRD-discovered resources.
+  # otel.k8sResourceCollector.objects entries derive resource-scoped rules from objects[].group/name.
+{{- range $group, $enabled := $rcfg.crDiscovery.apiGroups.include }}
+{{- if $enabled }}
+{{- if and (ne $group "*") (contains "*" $group) }}
+{{- fail (printf "otel.k8sResourceCollector.crDiscovery.apiGroups.include contains wildcard pattern %q, but restricted RBAC requires exact API groups or rbac.useWildcard=true" $group) }}
+{{- end }}
+  - apiGroups: [{{ $group | quote }}]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+{{- end }}
+{{- end }}
+{{- /* Collect resources per group from otel.k8sResourceCollector.objects */}}
+{{- $byGroup := dict }}
+{{- range $name, $obj := .Values.otel.k8sResourceCollector.objects }}
+{{- if $obj }}
+{{- $g := $obj.group | default "" }}
+{{- $existing := index $byGroup $g | default (list) }}
+{{- $_ := set $byGroup $g (append $existing $name) }}
+{{- end }}
+{{- end }}
+{{- range $g, $resources := $byGroup }}
+  - apiGroups: [{{ $g | quote }}]
+    resources:
+{{- range $resources | uniq }}
+      - {{ . | quote }}
+{{- end }}
+    verbs: ["get", "list", "watch"]
+{{- end }}
+{{- end }}
+{{- end }}

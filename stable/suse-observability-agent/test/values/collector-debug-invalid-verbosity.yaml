@@ -1,0 +1,9 @@
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+    debug:
+      enabled: true
+      verbosity: nonsense
+      pipelines:
+        - logs

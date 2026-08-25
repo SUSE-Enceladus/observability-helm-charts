@@ -1,8 +1,8 @@
 {{/*
 Shared settings in configmap for logging on stackstate sync pods
 
-<logger name="akka.actor.ActorSystemImpl" level="ERROR"/>
-This is here to supress X-Forwarded-for spurious messages, see zendesk #1401
+<logger name="org.apache.pekko.actor.ActorSystemImpl" level="ERROR"/>
+This is here to supress X-Forwarded-for spurious messages
 */}}
 {{- define "stackstate.configmap.server-base-log" }}
 <logger name="com.stackstate" level="INFO"/>
@@ -22,5 +22,7 @@ This is here to supress X-Forwarded-for spurious messages, see zendesk #1401
 <logger name="com.stackstate.util.logging" level="INFO"/>
 <logger name="com.stackstate.util.logging.Check" level="INFO"/>
 <logger name="com.stackvista.graph.transaction.StackTransactionManager" level="INFO"/>
-<logger name="akka.actor.ActorSystemImpl" level="ERROR"/>
+<logger name="org.apache.pekko.actor.ActorSystemImpl" level="ERROR"/>
+<!-- Suppress spurious message during hbase backup -->
+<logger name="org.apache.hadoop.hbase.security.token.FsDelegationToken" level="ERROR"/>
 {{- end -}}

@@ -1,0 +1,17 @@
+stackstate:
+  apiKey: test-api-key
+  cluster:
+    name: test-cluster
+  # Canonical URL shape per the kubernetes-v2 stackpack instructions.
+  url: https://my-suse-observability-instance.com/receiver/stsAgent
+
+# Enable cluster collector with default settings and integration API groups.
+otel:
+  enabled: true
+  k8sResourceCollector:
+    enabled: true
+    crDiscovery:
+      snapshotInterval: 5m
+      discoveryMode: api_groups
+    rbac:
+      useWildcard: true
